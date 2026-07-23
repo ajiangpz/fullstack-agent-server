@@ -1,112 +1,153 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { isIP } from 'node:net';
+import { Device, Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
-type DeviceStatus = 'online' | 'offline';
+import { QueryDevicesDto } from './dto/query-devices.dto';
 
-export type Device = {
-  id: number;
-  name: string;
-  ip: string;
-  portCount: number;
-  status: DeviceStatus;
-};
+export interface PaginatedDevices {
+  items: Device[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
 
 @Injectable()
 export class DevicesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private readonly devices: Device[] = [
-    {
-      id: 1,
-      name: 'Office Switch',
-      ip: '192.168.1.10',
-      portCount: 8,
-      status: 'online',
-    },
-    {
-      id: 2,
-      name: 'Meeting Room AP',
-      ip: '192.168.1.20',
-      portCount: 1,
-      status: 'offline',
-    },
-  ];
+  async findAll(query = new QueryDevicesDto()): Promise<PaginatedDevices> {
+    const { page, limit, search, status, minPortCount, maxPortCount } = query;
 
-  findAll(): Device[] {
-    return this.devices;
+    if (
+      minPortCount !== undefined &&
+      maxPortCount !== undefined &&
+      minPortCount > maxPortCount
+    ) {
+      throw new BadRequestException(
+        'minPortCount cannot be greater than maxPortCount',
+      );
+    }
+
+    const normalizedSearch = search?.trim();
+    const where: Prisma.DeviceWhereInput = {
+      status,
+      portCount:
+        minPortCount !== undefined || maxPortCount !== undefined
+          ? { gte: minPortCount, lte: maxPortCount }
+          : undefined,
+      OR: normalizedSearch
+        ? [
+            {
+              name: {
+                contains: normalizedSearch,
+                mode: 'insensitive',
+              },
+            },
+            ...(isIP(normalizedSearch) ? [{ ip: normalizedSearch }] : []),
+          ]
+        : undefined,
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.device.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { id: 'desc' },
+      }),
+      this.prisma.device.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
-  findOne(id: number): Device {
-    const device = this.devices.find((item) => item.id === id);
+  async findOne(id: number): Promise<Device> {
+    const device = await this.prisma.device.findUnique({
+      where: { id },
+    });
+
     if (!device) {
       throw new NotFoundException(`Device ${id} not found`);
     }
-    return device;
-  }
-  create(dto: CreateDeviceDto) {
-    this.assertUnique(dto);
-
-    const device: Device = {
-      id: this.getNextId(),
-      ...dto,
-    };
-
-    this.devices.push(device);
 
     return device;
   }
 
-  private assertUnique(
-    dto: Pick<UpdateDeviceDto, 'name' | 'ip'>,
-    excludedId?: number,
-  ): void {
-    if (
-      dto.name !== undefined &&
-      this.devices.some(
-        (device) => device.id !== excludedId && device.name === dto.name,
-      )
-    ) {
-      throw new ConflictException(`Device name "${dto.name}" already exists`);
-    }
-
-    if (
-      dto.ip !== undefined &&
-      this.devices.some(
-        (device) => device.id !== excludedId && device.ip === dto.ip,
-      )
-    ) {
-      throw new ConflictException(`Device IP "${dto.ip}" already exists`);
+  async create(dto: CreateDeviceDto): Promise<Device> {
+    try {
+      return await this.prisma.device.create({ data: dto });
+    } catch (error) {
+      this.handleWriteError(error, dto);
     }
   }
 
-  private getNextId(): number {
-    return (
-      this.devices.reduce((maxId, device) => Math.max(maxId, device.id), 0) + 1
-    );
+  async update(id: number, dto: UpdateDeviceDto): Promise<Device> {
+    try {
+      return await this.prisma.device.update({
+        where: { id },
+        data: dto,
+      });
+    } catch (error) {
+      this.handleWriteError(error, dto, id);
+    }
   }
 
-  update(id: number, dto: UpdateDeviceDto): Device {
-    const device = this.findOne(id);
-    this.assertUnique(dto, id);
-
-    Object.assign(device, dto);
-
-    return device;
+  async remove(id: number): Promise<Device> {
+    try {
+      return await this.prisma.device.delete({
+        where: { id },
+      });
+    } catch (error) {
+      this.handleWriteError(error, undefined, id);
+    }
   }
-  remove(id: number): Device {
-    const index = this.devices.findIndex((device) => device.id === id);
 
-    if (index === -1) {
-      throw new NotFoundException(`Device ${id} not found`);
+  private handleWriteError(
+    error: unknown,
+    dto?: Pick<UpdateDeviceDto, 'name' | 'ip'>,
+    id?: number,
+  ): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        const target = error.meta?.target;
+        const fields = Array.isArray(target) ? target : [target];
+
+        if (fields.includes('name') && dto?.name) {
+          throw new ConflictException(
+            `Device name "${dto.name}" already exists`,
+          );
+        }
+
+        if (fields.includes('ip') && dto?.ip) {
+          throw new ConflictException(`Device IP "${dto.ip}" already exists`);
+        }
+
+        throw new ConflictException('Device name or IP already exists');
+      }
+
+      if (error.code === 'P2025' && id !== undefined) {
+        throw new NotFoundException(`Device ${id} not found`);
+      }
     }
 
-    const [deletedDevice] = this.devices.splice(index, 1);
-
-    return deletedDevice;
+    throw error;
   }
 }

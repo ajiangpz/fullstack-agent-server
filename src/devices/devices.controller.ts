@@ -7,17 +7,19 @@ import {
   Body,
   Patch,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { DevicesService } from './devices.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
+import { QueryDevicesDto } from './dto/query-devices.dto';
 @Controller('devices')
 export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}
 
   @Get()
-  findAll() {
-    return this.devicesService.findAll();
+  findAll(@Query() query: QueryDevicesDto) {
+    return this.devicesService.findAll(query);
   }
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
