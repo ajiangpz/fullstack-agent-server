@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { DevicesService } from './devices.service';
 
 describe('DevicesService', () => {
@@ -7,7 +8,13 @@ describe('DevicesService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DevicesService],
+      providers: [
+        DevicesService,
+        {
+          provide: PrismaService,
+          useValue: {},
+        },
+      ],
     }).compile();
 
     service = module.get<DevicesService>(DevicesService);
@@ -72,13 +79,13 @@ describe('DevicesService', () => {
   });
 
   describe('update', () => {
-    it('should reject another device\'s name', () => {
+    it("should reject another device's name", () => {
       expect(() => service.update(2, { name: 'Office Switch' })).toThrow(
         ConflictException,
       );
     });
 
-    it('should reject another device\'s IP', () => {
+    it("should reject another device's IP", () => {
       expect(() => service.update(2, { ip: '192.168.1.10' })).toThrow(
         ConflictException,
       );

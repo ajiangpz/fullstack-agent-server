@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 type DeviceStatus = 'online' | 'offline';
@@ -17,6 +18,8 @@ export type Device = {
 
 @Injectable()
 export class DevicesService {
+  constructor(private readonly prisma: PrismaService) {}
+
   private readonly devices: Device[] = [
     {
       id: 1,
@@ -82,7 +85,9 @@ export class DevicesService {
   }
 
   private getNextId(): number {
-    return this.devices.reduce((maxId, device) => Math.max(maxId, device.id), 0) + 1;
+    return (
+      this.devices.reduce((maxId, device) => Math.max(maxId, device.id), 0) + 1
+    );
   }
 
   update(id: number, dto: UpdateDeviceDto): Device {
