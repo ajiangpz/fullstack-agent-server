@@ -18,6 +18,16 @@ enum DeviceStatus {
   offline
 }
 
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
 model Device {
   id        Int          @id @default(autoincrement())
   name      String       @unique @db.VarChar(100)
@@ -28,4 +38,20 @@ model Device {
   updatedAt DateTime     @updatedAt
 
   @@map("devices")
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  username     String     @unique @db.VarChar(50)
+  email        String     @unique @db.VarChar(255)
+  passwordHash String     @db.VarChar(255)
+  displayName  String?    @db.VarChar(100)
+  role         UserRole   @default(USER)
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status])
+  @@map("users")
 }
