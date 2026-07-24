@@ -4,6 +4,20 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export type PublicUser = Omit<User, 'passwordHash'>;
 
+export type LoginUser = Pick<
+  User,
+  | 'id'
+  | 'username'
+  | 'email'
+  | 'passwordHash'
+  | 'displayName'
+  | 'role'
+  | 'status'
+  | 'lastLoginAt'
+  | 'createdAt'
+  | 'updatedAt'
+>;
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -19,6 +33,42 @@ export class UsersService {
       select: {
         username: true,
         email: true,
+      },
+    });
+  }
+
+  findByEmail(email: string): Promise<LoginUser | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        passwordHash: true,
+        displayName: true,
+        role: true,
+        status: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  recordLogin(id: number): Promise<PublicUser> {
+    return this.prisma.user.update({
+      where: { id },
+      data: { lastLoginAt: new Date() },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        displayName: true,
+        role: true,
+        status: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
   }

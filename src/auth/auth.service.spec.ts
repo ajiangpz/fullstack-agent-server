@@ -1,5 +1,6 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { randomBytes, scryptSync } from 'node:crypto';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 
@@ -7,12 +8,16 @@ describe('AuthService', () => {
   let service: AuthService;
   let usersService: {
     findRegistrationConflict: jest.Mock;
+    findByEmail: jest.Mock;
+    recordLogin: jest.Mock;
     create: jest.Mock;
   };
 
   beforeEach(async () => {
     usersService = {
       findRegistrationConflict: jest.fn(),
+      findByEmail: jest.fn(),
+      recordLogin: jest.fn(),
       create: jest.fn(),
     };
 
@@ -94,5 +99,94 @@ describe('AuthService', () => {
       }),
     ).rejects.toThrow(ConflictException);
     expect(usersService.create).not.toHaveBeenCalled();
+  });
+
+  it('should authenticate an active user and record the login', async () => {
+    const now = new Date();
+    const password = 'StrongPassword123';
+    const salt = randomBytes(16);
+    const passwordHash = `scrypt$${salt.toString('hex')}$${scryptSync(
+      password,
+      salt,
+      64,
+    ).toString('hex')}`;
+    const publicUser = {
+      id: 1,
+      username: 'alice',
+      email: 'alice@example.com',
+      displayName: 'Alice',
+      role: 'USER',
+      status: 'ACTIVE',
+      lastLoginAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    usersService.findByEmail.mockResolvedValue({
+      ...publicUser,
+      passwordHash,
+    });
+    usersService.recordLogin.mockResolvedValue(publicUser);
+
+    await expect(
+      service.login({ email: ' Alice@Example.com ', password }),
+    ).resolves.toEqual(publicUser);
+
+    expect(usersService.findByEmail).toHaveBeenCalledWith('alice@example.com');
+    expect(usersService.recordLogin).toHaveBeenCalledWith(1);
+  });
+
+  it('should reject an unknown email address', async () => {
+    usersService.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      service.login({ email: 'alice@example.com', password: 'password' }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(usersService.recordLogin).not.toHaveBeenCalled();
+  });
+
+  it('should reject an incorrect password', async () => {
+    const salt = randomBytes(16);
+    usersService.findByEmail.mockResolvedValue({
+      id: 1,
+      username: 'alice',
+      email: 'alice@example.com',
+      passwordHash: `scrypt$${salt.toString('hex')}$${scryptSync(
+        'correct-password',
+        salt,
+        64,
+      ).toString('hex')}`,
+      displayName: 'Alice',
+      role: 'USER',
+      status: 'ACTIVE',
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await expect(
+      service.login({ email: 'alice@example.com', password: 'wrong-password' }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(usersService.recordLogin).not.toHaveBeenCalled();
+  });
+
+  it('should reject a disabled user', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      id: 1,
+      username: 'alice',
+      email: 'alice@example.com',
+      passwordHash:
+        'scrypt$00000000000000000000000000000000$00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+      displayName: 'Alice',
+      role: 'USER',
+      status: 'DISABLED',
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await expect(
+      service.login({ email: 'alice@example.com', password: 'password' }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(usersService.recordLogin).not.toHaveBeenCalled();
   });
 });
