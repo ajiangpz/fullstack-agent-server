@@ -3,6 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { PublicUser, UsersService } from '../users/users.service';
@@ -11,9 +12,18 @@ import { LoginDto } from './dto/login.dto';
 
 const scryptAsync = promisify(scrypt);
 
+export interface LoginResult {
+  accessToken: string;
+  tokenType: 'Bearer';
+  user: PublicUser;
+}
+
 @Injectable()
 export class AuthService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async register(dto: RegisterDto): Promise<PublicUser> {
     const username = dto.username.trim();
@@ -41,7 +51,7 @@ export class AuthService {
     });
   }
 
-  async login(dto: LoginDto): Promise<PublicUser> {
+  async login(dto: LoginDto): Promise<LoginResult> {
     const email = dto.email.trim().toLowerCase();
     const user = await this.usersService.findByEmail(email);
 
@@ -53,7 +63,19 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    return this.usersService.recordLogin(user.id);
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+    });
+    const publicUser = await this.usersService.recordLogin(user.id);
+
+    return {
+      accessToken,
+      tokenType: 'Bearer',
+      user: publicUser,
+    };
   }
 
   private async hashPassword(password: string): Promise<string> {

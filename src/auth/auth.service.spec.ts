@@ -1,4 +1,5 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { UsersService } from '../users/users.service';
@@ -12,6 +13,7 @@ describe('AuthService', () => {
     recordLogin: jest.Mock;
     create: jest.Mock;
   };
+  let jwtService: { signAsync: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
@@ -20,6 +22,9 @@ describe('AuthService', () => {
       recordLogin: jest.fn(),
       create: jest.fn(),
     };
+    jwtService = {
+      signAsync: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -27,6 +32,10 @@ describe('AuthService', () => {
         {
           provide: UsersService,
           useValue: usersService,
+        },
+        {
+          provide: JwtService,
+          useValue: jwtService,
         },
       ],
     }).compile();
@@ -126,12 +135,23 @@ describe('AuthService', () => {
       passwordHash,
     });
     usersService.recordLogin.mockResolvedValue(publicUser);
+    jwtService.signAsync.mockResolvedValue('signed.jwt.token');
 
     await expect(
       service.login({ email: ' Alice@Example.com ', password }),
-    ).resolves.toEqual(publicUser);
+    ).resolves.toEqual({
+      accessToken: 'signed.jwt.token',
+      tokenType: 'Bearer',
+      user: publicUser,
+    });
 
     expect(usersService.findByEmail).toHaveBeenCalledWith('alice@example.com');
+    expect(jwtService.signAsync).toHaveBeenCalledWith({
+      sub: 1,
+      username: 'alice',
+      email: 'alice@example.com',
+      role: 'USER',
+    });
     expect(usersService.recordLogin).toHaveBeenCalledWith(1);
   });
 
