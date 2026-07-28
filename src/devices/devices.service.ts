@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { isIP } from 'node:net';
 import { Device, Prisma } from '../generated/prisma/client';
+import { UserRole } from '../generated/prisma/enums';
+import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
@@ -25,7 +27,10 @@ export interface PaginatedDevices {
 export class DevicesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query = new QueryDevicesDto()): Promise<PaginatedDevices> {
+  async findAll(
+    user: AuthenticatedUser,
+    query = new QueryDevicesDto(),
+  ): Promise<PaginatedDevices> {
     const { page, limit, search, status, minPortCount, maxPortCount } = query;
 
     if (
@@ -40,6 +45,7 @@ export class DevicesService {
 
     const normalizedSearch = search?.trim();
     const where: Prisma.DeviceWhereInput = {
+      ...this.getOwnershipFilter(user),
       status,
       portCount:
         minPortCount !== undefined || maxPortCount !== undefined
@@ -79,9 +85,9 @@ export class DevicesService {
     };
   }
 
-  async findOne(id: number): Promise<Device> {
-    const device = await this.prisma.device.findUnique({
-      where: { id },
+  async findOne(id: number, user: AuthenticatedUser): Promise<Device> {
+    const device = await this.prisma.device.findFirst({
+      where: { id, ...this.getOwnershipFilter(user) },
     });
 
     if (!device) {
@@ -91,18 +97,27 @@ export class DevicesService {
     return device;
   }
 
-  async create(dto: CreateDeviceDto): Promise<Device> {
+  async create(dto: CreateDeviceDto, user: AuthenticatedUser): Promise<Device> {
     try {
-      return await this.prisma.device.create({ data: dto });
+      return await this.prisma.device.create({
+        data: {
+          ...dto,
+          owner: { connect: { id: user.id } },
+        },
+      });
     } catch (error) {
       this.handleWriteError(error, dto);
     }
   }
 
-  async update(id: number, dto: UpdateDeviceDto): Promise<Device> {
+  async update(
+    id: number,
+    dto: UpdateDeviceDto,
+    user: AuthenticatedUser,
+  ): Promise<Device> {
     try {
       return await this.prisma.device.update({
-        where: { id },
+        where: { id, ...this.getOwnershipFilter(user) },
         data: dto,
       });
     } catch (error) {
@@ -110,14 +125,20 @@ export class DevicesService {
     }
   }
 
-  async remove(id: number): Promise<Device> {
+  async remove(id: number, user: AuthenticatedUser): Promise<Device> {
     try {
       return await this.prisma.device.delete({
-        where: { id },
+        where: { id, ...this.getOwnershipFilter(user) },
       });
     } catch (error) {
       this.handleWriteError(error, undefined, id);
     }
+  }
+
+  private getOwnershipFilter(
+    user: AuthenticatedUser,
+  ): Pick<Prisma.DeviceWhereInput, 'ownerId'> {
+    return user.role === UserRole.ADMIN ? {} : { ownerId: user.id };
   }
 
   private handleWriteError(

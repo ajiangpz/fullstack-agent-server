@@ -8,12 +8,12 @@ import {
   Patch,
   Delete,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { UserRole } from '../generated/prisma/enums';
+import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { DevicesService } from './devices.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
@@ -24,26 +24,39 @@ export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}
 
   @Get()
-  findAll(@Query() query: QueryDevicesDto) {
-    return this.devicesService.findAll(query);
+  findAll(
+    @Query() query: QueryDevicesDto,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.devicesService.findAll(request.user, query);
   }
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.devicesService.findOne(id);
+  findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.devicesService.findOne(id, request.user);
   }
   @Post()
-  @Roles(UserRole.ADMIN)
-  create(@Body() dto: CreateDeviceDto) {
-    return this.devicesService.create(dto);
+  create(
+    @Body() dto: CreateDeviceDto,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.devicesService.create(dto, request.user);
   }
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDeviceDto) {
-    return this.devicesService.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDeviceDto,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.devicesService.update(id, dto, request.user);
   }
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.devicesService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.devicesService.remove(id, request.user);
   }
 }

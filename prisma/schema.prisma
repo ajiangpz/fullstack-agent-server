@@ -34,9 +34,12 @@ model Device {
   ip        String       @unique @db.Inet
   portCount Int
   status    DeviceStatus @default(offline)
+  ownerId   Int
+  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
+  @@index([ownerId])
   @@map("devices")
 }
 
@@ -49,6 +52,7 @@ model User {
   role         UserRole   @default(USER)
   status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?
+  devices      Device[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
