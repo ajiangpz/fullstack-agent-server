@@ -63,6 +63,12 @@ describe('JwtStrategy', () => {
       email: 'alice@example.com',
       role: undefined,
     },
+    {
+      sub: 1,
+      username: 'alice',
+      email: 'alice@example.com',
+      role: 'UNKNOWN',
+    },
   ])('rejects an invalid identity payload', (payload) => {
     expect(() => strategy.validate(payload)).toThrow(UnauthorizedException);
   });
