@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidateSet('start', 'studio')]
+    [string]$Mode = 'start'
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -48,8 +51,7 @@ $requiredVariables = @(
     'REMOTE_SSH_HOST',
     'REMOTE_SSH_USER',
     'REMOTE_DB_HOST',
-    'REMOTE_DB_PORT',
-    'LOCAL_DB_TUNNEL_PORT'
+    'REMOTE_DB_PORT'
 )
 
 foreach ($name in $requiredVariables) {
@@ -58,7 +60,19 @@ foreach ($name in $requiredVariables) {
     }
 }
 
-$localPort = [int]$env:LOCAL_DB_TUNNEL_PORT
+$localPortVariable = if ($Mode -eq 'studio') {
+    'LOCAL_STUDIO_DB_TUNNEL_PORT'
+}
+else {
+    'LOCAL_DB_TUNNEL_PORT'
+}
+
+$localPortValue = [Environment]::GetEnvironmentVariable($localPortVariable)
+if ([string]::IsNullOrWhiteSpace($localPortValue)) {
+    throw "$localPortVariable is not configured."
+}
+
+$localPort = [int]$localPortValue
 $existingListener = Get-NetTCPConnection `
     -LocalPort $localPort `
     -State Listen `
@@ -175,10 +189,16 @@ powershell.exe -NoProfile -NonInteractive -Command "[Console]::Out.Write($env:CO
     }
 
     Write-Host "SSH tunnel ready on 127.0.0.1:$localPort."
-    & npm run start
+
+    if ($Mode -eq 'studio') {
+        & npx prisma studio --port 5555
+    }
+    else {
+        & npm run start
+    }
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Application exited with code $LASTEXITCODE."
+        throw "$Mode command exited with code $LASTEXITCODE."
     }
 }
 finally {
