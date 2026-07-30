@@ -12,6 +12,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { QueryDevicesDto } from './dto/query-devices.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../generated/prisma/enums';
+import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
 
 export interface PaginatedDevices {
   items: Device[];
@@ -25,7 +28,10 @@ export interface PaginatedDevices {
 
 @Injectable()
 export class DevicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async findAll(
     user: AuthenticatedUser,
@@ -99,12 +105,14 @@ export class DevicesService {
 
   async create(dto: CreateDeviceDto, user: AuthenticatedUser): Promise<Device> {
     try {
-      return await this.prisma.device.create({
+      const device = await this.prisma.device.create({
         data: {
           ...dto,
           owner: { connect: { id: user.id } },
         },
       });
+      this.publishDeviceEvent(AuditAction.DEVICE_CREATED, device, user);
+      return device;
     } catch (error) {
       this.handleWriteError(error, dto);
     }
@@ -116,10 +124,14 @@ export class DevicesService {
     user: AuthenticatedUser,
   ): Promise<Device> {
     try {
-      return await this.prisma.device.update({
+      const device = await this.prisma.device.update({
         where: { id, ...this.getOwnershipFilter(user) },
         data: dto,
       });
+      this.publishDeviceEvent(AuditAction.DEVICE_UPDATED, device, user, {
+        changedFields: Object.keys(dto),
+      });
+      return device;
     } catch (error) {
       this.handleWriteError(error, dto, id);
     }
@@ -127,9 +139,11 @@ export class DevicesService {
 
   async remove(id: number, user: AuthenticatedUser): Promise<Device> {
     try {
-      return await this.prisma.device.delete({
+      const device = await this.prisma.device.delete({
         where: { id, ...this.getOwnershipFilter(user) },
       });
+      this.publishDeviceEvent(AuditAction.DEVICE_DELETED, device, user);
+      return device;
     } catch (error) {
       this.handleWriteError(error, undefined, id);
     }
@@ -139,6 +153,28 @@ export class DevicesService {
     user: AuthenticatedUser,
   ): Pick<Prisma.DeviceWhereInput, 'ownerId'> {
     return user.role === UserRole.ADMIN ? {} : { ownerId: user.id };
+  }
+
+  private publishDeviceEvent(
+    action: AuditAction,
+    device: Device,
+    user: AuthenticatedUser,
+    metadata?: Record<string, unknown>,
+  ): void {
+    this.eventEmitter.emit(
+      DOMAIN_EVENT_NAME,
+      new DomainEvent({
+        action,
+        resourceType: 'device',
+        resourceId: String(device.id),
+        actorId: user.id,
+        metadata: {
+          name: device.name,
+          ip: device.ip,
+          ...metadata,
+        },
+      }),
+    );
   }
 
   private handleWriteError(

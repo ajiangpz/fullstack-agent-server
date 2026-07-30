@@ -9,6 +9,9 @@ import { promisify } from 'node:util';
 import { PublicUser, UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../generated/prisma/enums';
+import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
 
 const scryptAsync = promisify(scrypt);
 
@@ -23,6 +26,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async register(dto: RegisterDto): Promise<PublicUser> {
@@ -43,12 +47,25 @@ export class AuthService {
 
     const passwordHash = await this.hashPassword(dto.password);
 
-    return this.usersService.create({
+    const user = await this.usersService.create({
       username,
       email,
       passwordHash,
       displayName: dto.displayName?.trim() || null,
     });
+
+    this.eventEmitter.emit(
+      DOMAIN_EVENT_NAME,
+      new DomainEvent({
+        action: AuditAction.USER_REGISTERED,
+        resourceType: 'user',
+        resourceId: String(user.id),
+        actorId: user.id,
+        metadata: { username: user.username, email: user.email },
+      }),
+    );
+
+    return user;
   }
 
   async login(dto: LoginDto): Promise<LoginResult> {
@@ -70,6 +87,16 @@ export class AuthService {
       role: user.role,
     });
     const publicUser = await this.usersService.recordLogin(user.id);
+
+    this.eventEmitter.emit(
+      DOMAIN_EVENT_NAME,
+      new DomainEvent({
+        action: AuditAction.USER_LOGGED_IN,
+        resourceType: 'user',
+        resourceId: String(user.id),
+        actorId: user.id,
+      }),
+    );
 
     return {
       accessToken,

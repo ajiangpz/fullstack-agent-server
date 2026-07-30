@@ -13,6 +13,7 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtStrategy } from './jwt.strategy';
 import { RolesGuard } from './roles.guard';
+import { DomainEventsModule } from '../events/domain-events.module';
 
 const createJwtOptions = (): JwtModuleOptions => {
   const secret = process.env.JWT_SECRET;
@@ -33,6 +34,7 @@ const createJwtOptions = (): JwtModuleOptions => {
 
 @Module({
   imports: [
+    DomainEventsModule,
     UsersModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({ useFactory: createJwtOptions }),

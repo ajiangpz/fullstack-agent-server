@@ -28,6 +28,31 @@ enum UserStatus {
   DISABLED
 }
 
+enum AuditAction {
+  USER_REGISTERED
+  USER_LOGGED_IN
+  DEVICE_CREATED
+  DEVICE_UPDATED
+  DEVICE_DELETED
+}
+
+model AuditLog {
+  id           Int         @id @default(autoincrement())
+  action       AuditAction
+  resourceType String      @db.VarChar(50)
+  resourceId   String?     @db.VarChar(100)
+  actorId      Int?
+  actor        User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  metadata     Json?
+  createdAt    DateTime    @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
 model Device {
   id        Int          @id @default(autoincrement())
   name      String       @unique @db.VarChar(100)
@@ -53,6 +78,7 @@ model User {
   status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?
   devices      Device[]
+  auditLogs    AuditLog[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

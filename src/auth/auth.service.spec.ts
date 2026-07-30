@@ -4,6 +4,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../generated/prisma/enums';
+import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -14,6 +17,7 @@ describe('AuthService', () => {
     create: jest.Mock;
   };
   let jwtService: { signAsync: jest.Mock };
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
@@ -24,6 +28,9 @@ describe('AuthService', () => {
     };
     jwtService = {
       signAsync: jest.fn(),
+    };
+    eventEmitter = {
+      emit: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -36,6 +43,10 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: jwtService,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: eventEmitter,
         },
       ],
     }).compile();
@@ -76,6 +87,19 @@ describe('AuthService', () => {
       ) as string,
       displayName: 'Alice',
     });
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      DOMAIN_EVENT_NAME,
+      new DomainEvent({
+        action: AuditAction.USER_REGISTERED,
+        resourceType: 'user',
+        resourceId: '1',
+        actorId: 1,
+        metadata: {
+          username: 'alice',
+          email: 'alice@example.com',
+        },
+      }),
+    );
   });
 
   it('should reject a duplicate username', async () => {
@@ -153,6 +177,15 @@ describe('AuthService', () => {
       role: 'USER',
     });
     expect(usersService.recordLogin).toHaveBeenCalledWith(1);
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      DOMAIN_EVENT_NAME,
+      new DomainEvent({
+        action: AuditAction.USER_LOGGED_IN,
+        resourceType: 'user',
+        resourceId: '1',
+        actorId: 1,
+      }),
+    );
   });
 
   it('should reject an unknown email address', async () => {

@@ -9,6 +9,9 @@ import { UserRole } from '../generated/prisma/enums';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { DevicesService } from './devices.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuditAction } from '../generated/prisma/enums';
+import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
 
 describe('DevicesService', () => {
   let service: DevicesService;
@@ -22,6 +25,7 @@ describe('DevicesService', () => {
       delete: jest.Mock;
     };
   };
+  let eventEmitter: { emit: jest.Mock };
 
   const device = {
     id: 1,
@@ -64,6 +68,9 @@ describe('DevicesService', () => {
         delete: jest.fn(),
       },
     };
+    eventEmitter = {
+      emit: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -71,6 +78,10 @@ describe('DevicesService', () => {
         {
           provide: PrismaService,
           useValue: prisma,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: eventEmitter,
         },
       ],
     }).compile();
@@ -227,6 +238,19 @@ describe('DevicesService', () => {
           owner: { connect: { id: user.id } },
         },
       });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        DOMAIN_EVENT_NAME,
+        new DomainEvent({
+          action: AuditAction.DEVICE_CREATED,
+          resourceType: 'device',
+          resourceId: '3',
+          actorId: user.id,
+          metadata: {
+            name: createdDevice.name,
+            ip: createdDevice.ip,
+          },
+        }),
+      );
     });
 
     it('should reject a duplicate device name', async () => {
@@ -263,6 +287,20 @@ describe('DevicesService', () => {
         where: { id: 1, ownerId: user.id },
         data: dto,
       });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        DOMAIN_EVENT_NAME,
+        new DomainEvent({
+          action: AuditAction.DEVICE_UPDATED,
+          resourceType: 'device',
+          resourceId: '1',
+          actorId: user.id,
+          metadata: {
+            name: updatedDevice.name,
+            ip: updatedDevice.ip,
+            changedFields: ['portCount'],
+          },
+        }),
+      );
     });
 
     it('should reject a duplicate device name', async () => {
@@ -292,6 +330,19 @@ describe('DevicesService', () => {
       expect(prisma.device.delete).toHaveBeenCalledWith({
         where: { id: 1, ownerId: user.id },
       });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        DOMAIN_EVENT_NAME,
+        new DomainEvent({
+          action: AuditAction.DEVICE_DELETED,
+          resourceType: 'device',
+          resourceId: '1',
+          actorId: user.id,
+          metadata: {
+            name: device.name,
+            ip: device.ip,
+          },
+        }),
+      );
     });
 
     it('should throw when the device does not exist', async () => {
