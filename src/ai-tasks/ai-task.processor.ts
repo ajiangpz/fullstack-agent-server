@@ -1,0 +1,72 @@
+import { Inject } from '@nestjs/common';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
+import { PrismaService } from '../prisma/prisma.service';
+import { AI_CLIENT, AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
+import type { AiClient } from './ai-client';
+
+interface AiTaskJobData {
+  taskId: string;
+}
+
+@Processor(AI_TASK_QUEUE)
+export class AiTaskProcessor extends WorkerHost {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(AI_CLIENT) private readonly aiClient: AiClient,
+  ) {
+    super();
+  }
+
+  async process(job: Job<AiTaskJobData, void, string>): Promise<void> {
+    if (job.name !== AI_TASK_JOB) {
+      throw new Error(`Unsupported job type: ${job.name}`);
+    }
+
+    const task = await this.prisma.aiTask.update({
+      where: { id: job.data.taskId },
+      data: {
+        status: 'PROCESSING',
+        attempts: { increment: 1 },
+        startedAt: new Date(),
+        completedAt: null,
+        errorMessage: null,
+      },
+      select: { prompt: true },
+    });
+
+    try {
+      const result = await this.aiClient.generate(task.prompt);
+      await this.prisma.aiTask.update({
+        where: { id: job.data.taskId },
+        data: {
+          status: 'COMPLETED',
+          result,
+          errorMessage: null,
+          completedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      const maxAttempts = job.opts.attempts ?? 1;
+      const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
+
+      if (isFinalAttempt) {
+        await this.prisma.aiTask.update({
+          where: { id: job.data.taskId },
+          data: {
+            status: 'FAILED',
+            errorMessage: this.getErrorMessage(error),
+            completedAt: new Date(),
+          },
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private getErrorMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : 'Unknown AI error';
+    return message.slice(0, 2_000);
+  }
+}

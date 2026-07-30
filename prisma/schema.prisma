@@ -36,6 +36,32 @@ enum AuditAction {
   DEVICE_DELETED
 }
 
+enum AiTaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model AiTask {
+  id           String       @id @default(cuid())
+  prompt       String       @db.Text
+  status       AiTaskStatus @default(PENDING)
+  result       String?      @db.Text
+  errorMessage String?      @db.Text
+  attempts     Int          @default(0)
+  ownerId      Int
+  owner        User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([ownerId, createdAt])
+  @@index([status])
+  @@map("ai_tasks")
+}
+
 model AuditLog {
   id           Int         @id @default(autoincrement())
   action       AuditAction
@@ -79,6 +105,7 @@ model User {
   lastLoginAt  DateTime?
   devices      Device[]
   auditLogs    AuditLog[]
+  aiTasks      AiTask[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('start', 'studio')]
+    [ValidateSet('start', 'studio', 'migrate')]
     [string]$Mode = 'start'
 )
 
@@ -54,6 +54,15 @@ $requiredVariables = @(
     'REMOTE_DB_PORT'
 )
 
+if ($Mode -eq 'start') {
+    $requiredVariables += @(
+        'REMOTE_REDIS_HOST',
+        'REMOTE_REDIS_PORT',
+        'LOCAL_REDIS_TUNNEL_PORT',
+        'REDIS_PASSWORD'
+    )
+}
+
 foreach ($name in $requiredVariables) {
     if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
         throw "$name is not configured."
@@ -73,13 +82,60 @@ if ([string]::IsNullOrWhiteSpace($localPortValue)) {
 }
 
 $localPort = [int]$localPortValue
+$localRedisPort = if ($Mode -eq 'start') {
+    [int]$env:LOCAL_REDIS_TUNNEL_PORT
+}
+else {
+    $null
+}
+$tunnelPorts = if ($Mode -eq 'start') {
+    @($localPort, $localRedisPort)
+}
+else {
+    @($localPort)
+}
 $existingListener = Get-NetTCPConnection `
-    -LocalPort $localPort `
+    -LocalPort $tunnelPorts `
     -State Listen `
     -ErrorAction SilentlyContinue
 
+$reuseExistingTunnel = $false
 if ($existingListener) {
-    throw "Local port $localPort is already in use."
+    $listenerPorts = @($existingListener.LocalPort | Sort-Object -Unique)
+    $listenerProcessIds = @(
+        $existingListener.OwningProcess | Sort-Object -Unique
+    )
+    $expectedForward = (
+        "-L ${localPort}:$($env:REMOTE_DB_HOST):$($env:REMOTE_DB_PORT)"
+    )
+    $expectedTarget = (
+        "$($env:REMOTE_SSH_USER)@$($env:REMOTE_SSH_HOST)"
+    )
+    $existingProcesses = @(
+        $listenerProcessIds | ForEach-Object {
+            Get-CimInstance `
+                -ClassName Win32_Process `
+                -Filter "ProcessId = $_" `
+                -ErrorAction SilentlyContinue
+        }
+    )
+    $matchingDatabaseTunnel = (
+        $Mode -ne 'start' -and
+        $listenerPorts.Count -eq 1 -and
+        $listenerPorts[0] -eq $localPort -and
+        $existingProcesses.Count -eq 1 -and
+        $existingProcesses[0].Name -eq 'ssh.exe' -and
+        $existingProcesses[0].CommandLine.Contains($expectedForward) -and
+        $existingProcesses[0].CommandLine.Contains($expectedTarget)
+    )
+
+    if ($matchingDatabaseTunnel) {
+        $reuseExistingTunnel = $true
+    }
+    else {
+        $usedPorts = $listenerPorts -join ', '
+        throw "Local tunnel port is already in use: $usedPorts."
+    }
 }
 
 if (
@@ -102,6 +158,8 @@ else {
 $temporaryDirectory = $null
 $tunnelProcess = $null
 $originalDatabaseUrl = $env:DATABASE_URL
+$originalRedisHost = $env:REDIS_HOST
+$originalRedisPort = $env:REDIS_PORT
 
 try {
     $sshArguments = @(
@@ -114,6 +172,13 @@ try {
         '-o',
         'ExitOnForwardFailure=yes'
     )
+
+    if ($Mode -eq 'start') {
+        $sshArguments += @(
+            '-L',
+            "${localRedisPort}:$($env:REMOTE_REDIS_HOST):$($env:REMOTE_REDIS_PORT)"
+        )
+    }
 
     if ($sshPassword) {
         $temporaryDirectory = Join-Path (
@@ -152,49 +217,64 @@ powershell.exe -NoProfile -NonInteractive -Command "[Console]::Out.Write($env:CO
         $sshArguments += @('-o', 'BatchMode=yes')
     }
 
-    $sshArguments += "$($env:REMOTE_SSH_USER)@$($env:REMOTE_SSH_HOST)"
-    $tunnelProcess = Start-Process `
-        -FilePath 'ssh.exe' `
-        -ArgumentList $sshArguments `
-        -WindowStyle Hidden `
-        -PassThru
+    if (-not $reuseExistingTunnel) {
+        $sshArguments += "$($env:REMOTE_SSH_USER)@$($env:REMOTE_SSH_HOST)"
+        $tunnelProcess = Start-Process `
+            -FilePath 'ssh.exe' `
+            -ArgumentList $sshArguments `
+            -WindowStyle Hidden `
+            -PassThru
 
-    $tunnelReady = $false
-    foreach ($attempt in 1..20) {
-        if ($tunnelProcess.HasExited) {
-            throw 'SSH tunnel exited before becoming ready.'
+        $tunnelReady = $false
+        foreach ($attempt in 1..20) {
+            if ($tunnelProcess.HasExited) {
+                throw 'SSH tunnel exited before becoming ready.'
+            }
+
+            $listeners = Get-NetTCPConnection `
+                -LocalPort $tunnelPorts `
+                -State Listen `
+                -ErrorAction SilentlyContinue
+            $listeningPorts = @($listeners.LocalPort | Sort-Object -Unique)
+            if ($listeningPorts.Count -eq $tunnelPorts.Count) {
+                $tunnelReady = $true
+                break
+            }
+
+            Start-Sleep -Milliseconds 500
         }
 
-        $listener = Get-NetTCPConnection `
-            -LocalPort $localPort `
-            -State Listen `
-            -ErrorAction SilentlyContinue
-        if ($listener) {
-            $tunnelReady = $true
-            break
+        if (-not $tunnelReady) {
+            throw 'SSH tunnel did not become ready.'
         }
-
-        Start-Sleep -Milliseconds 500
-    }
-
-    if (-not $tunnelReady) {
-        throw 'SSH tunnel did not become ready.'
     }
 
     $remoteDatabaseEndpoint = "@127.0.0.1:$localPort/"
     $env:DATABASE_URL = $originalDatabaseUrl -replace '@[^/]+/', $remoteDatabaseEndpoint
+    if ($Mode -eq 'start') {
+        $env:REDIS_HOST = '127.0.0.1'
+        $env:REDIS_PORT = [string]$localRedisPort
+    }
 
     if ($env:DATABASE_URL -eq $originalDatabaseUrl) {
         throw 'DATABASE_URL is not a supported PostgreSQL connection URL.'
     }
 
-    Write-Host "SSH tunnel ready on 127.0.0.1:$localPort."
-
-    if ($Mode -eq 'studio') {
-        & npx prisma studio --port 5555
+    Write-Host "Database tunnel ready on 127.0.0.1:$localPort."
+    if ($Mode -eq 'start') {
+        Write-Host "Redis tunnel ready on 127.0.0.1:$localRedisPort."
     }
-    else {
-        & npm run start
+
+    switch ($Mode) {
+        'studio' {
+            & npx prisma studio --port 5555
+        }
+        'migrate' {
+            & npx prisma migrate deploy
+        }
+        default {
+            & npm run start
+        }
     }
 
     if ($LASTEXITCODE -ne 0) {
@@ -203,6 +283,8 @@ powershell.exe -NoProfile -NonInteractive -Command "[Console]::Out.Write($env:CO
 }
 finally {
     $env:DATABASE_URL = $originalDatabaseUrl
+    $env:REDIS_HOST = $originalRedisHost
+    $env:REDIS_PORT = $originalRedisPort
 
     if ($tunnelProcess -and -not $tunnelProcess.HasExited) {
         Stop-Process -Id $tunnelProcess.Id -Force
