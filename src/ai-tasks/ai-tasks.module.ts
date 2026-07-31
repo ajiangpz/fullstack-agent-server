@@ -3,10 +3,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AiTaskProcessor } from './ai-task.processor';
-import { AI_CLIENT, AI_TASK_QUEUE } from './ai-task.constants';
-import { MockAiClient } from './ai-client';
+import { AI_PROVIDER, AI_TASK_QUEUE } from './ai-task.constants';
 import { AiTasksController } from './ai-tasks.controller';
 import { AiTasksService } from './ai-tasks.service';
+import { createAiProvider } from './providers/ai-provider.factory';
 
 @Module({
   imports: [
@@ -18,8 +18,7 @@ import { AiTasksService } from './ai-tasks.service';
   providers: [
     AiTasksService,
     AiTaskProcessor,
-    MockAiClient,
-    { provide: AI_CLIENT, useExisting: MockAiClient },
+    { provide: AI_PROVIDER, useFactory: createAiProvider },
   ],
 })
 export class AiTasksModule {}

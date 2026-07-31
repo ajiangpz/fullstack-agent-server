@@ -57,6 +57,24 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## AI provider
+
+AI tasks use the mock provider by default. Configure these environment variables
+to call the OpenAI Responses API:
+
+```dotenv
+AI_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=your-model-id
+OPENAI_TIMEOUT_MS=60000
+OPENAI_MAX_RETRIES=0
+OPENAI_MAX_OUTPUT_TOKENS=2048
+```
+
+`OPENAI_BASE_URL` is optional and should normally be omitted for the official
+OpenAI API. `OPENAI_INSTRUCTIONS` can provide application-level instructions.
+Provider SDK retries default to zero because BullMQ owns the task retry policy.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

@@ -1,9 +1,10 @@
 import { Inject } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { AI_CLIENT, AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
-import type { AiClient } from './ai-client';
+import { AI_PROVIDER, AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
+import type { AiProvider } from './providers/ai-provider';
+import { AiProviderError } from './providers/ai-provider';
 
 interface AiTaskJobData {
   taskId: string;
@@ -13,7 +14,7 @@ interface AiTaskJobData {
 export class AiTaskProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(AI_CLIENT) private readonly aiClient: AiClient,
+    @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
   ) {
     super();
   }
@@ -36,7 +37,9 @@ export class AiTaskProcessor extends WorkerHost {
     });
 
     try {
-      const result = await this.aiClient.generate(task.prompt);
+      const result = await this.aiProvider.generateText({
+        prompt: task.prompt,
+      });
       await this.prisma.aiTask.update({
         where: { id: job.data.taskId },
         data: {
@@ -48,7 +51,8 @@ export class AiTaskProcessor extends WorkerHost {
       });
     } catch (error) {
       const maxAttempts = job.opts.attempts ?? 1;
-      const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
+      const retryable = !(error instanceof AiProviderError) || error.retryable;
+      const isFinalAttempt = !retryable || job.attemptsMade + 1 >= maxAttempts;
 
       if (isFinalAttempt) {
         await this.prisma.aiTask.update({
@@ -61,6 +65,9 @@ export class AiTaskProcessor extends WorkerHost {
         });
       }
 
+      if (!retryable) {
+        throw new UnrecoverableError(this.getErrorMessage(error));
+      }
       throw error;
     }
   }

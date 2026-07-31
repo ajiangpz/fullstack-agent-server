@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import type { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import type { AiClient } from './ai-client';
 import { AI_TASK_JOB } from './ai-task.constants';
 import { AiTaskProcessor } from './ai-task.processor';
+import type { AiProvider } from './providers/ai-provider';
+import { AiProviderError } from './providers/ai-provider';
 
 describe('AiTaskProcessor', () => {
   const prisma = {
@@ -11,7 +12,7 @@ describe('AiTaskProcessor', () => {
       update: jest.fn(),
     },
   };
-  const aiClient: AiClient = { generate: jest.fn() };
+  const aiProvider: AiProvider = { generateText: jest.fn() };
   let processor: AiTaskProcessor;
 
   const createJob = (
@@ -29,7 +30,7 @@ describe('AiTaskProcessor', () => {
     jest.clearAllMocks();
     processor = new AiTaskProcessor(
       prisma as unknown as PrismaService,
-      aiClient,
+      aiProvider,
     );
   });
 
@@ -37,7 +38,7 @@ describe('AiTaskProcessor', () => {
     prisma.aiTask.update
       .mockResolvedValueOnce({ prompt: 'hello' })
       .mockResolvedValueOnce({});
-    (aiClient.generate as jest.Mock).mockResolvedValue('answer');
+    (aiProvider.generateText as jest.Mock).mockResolvedValue('answer');
 
     await processor.process(createJob());
 
@@ -61,7 +62,9 @@ describe('AiTaskProcessor', () => {
 
   it('leaves a retryable failure in processing state', async () => {
     prisma.aiTask.update.mockResolvedValueOnce({ prompt: 'hello' });
-    (aiClient.generate as jest.Mock).mockRejectedValue(new Error('temporary'));
+    (aiProvider.generateText as jest.Mock).mockRejectedValue(
+      new Error('temporary'),
+    );
 
     await expect(processor.process(createJob())).rejects.toThrow('temporary');
     expect(prisma.aiTask.update).toHaveBeenCalledTimes(1);
@@ -71,7 +74,9 @@ describe('AiTaskProcessor', () => {
     prisma.aiTask.update
       .mockResolvedValueOnce({ prompt: 'hello' })
       .mockResolvedValueOnce({});
-    (aiClient.generate as jest.Mock).mockRejectedValue(new Error('permanent'));
+    (aiProvider.generateText as jest.Mock).mockRejectedValue(
+      new Error('permanent'),
+    );
 
     await expect(
       processor.process(createJob({ attemptsMade: 2 })),
@@ -81,6 +86,26 @@ describe('AiTaskProcessor', () => {
       data: expect.objectContaining({
         status: 'FAILED',
         errorMessage: 'permanent',
+      }),
+    });
+  });
+
+  it('marks a non-retryable provider failure immediately', async () => {
+    prisma.aiTask.update
+      .mockResolvedValueOnce({ prompt: 'hello' })
+      .mockResolvedValueOnce({});
+    (aiProvider.generateText as jest.Mock).mockRejectedValue(
+      new AiProviderError('OpenAI authentication failed', false),
+    );
+
+    await expect(processor.process(createJob())).rejects.toThrow(
+      'OpenAI authentication failed',
+    );
+    expect(prisma.aiTask.update).toHaveBeenNthCalledWith(2, {
+      where: { id: 'task-1' },
+      data: expect.objectContaining({
+        status: 'FAILED',
+        errorMessage: 'OpenAI authentication failed',
       }),
     });
   });
