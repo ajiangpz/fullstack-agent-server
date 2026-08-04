@@ -1,9 +1,11 @@
+import type { AiTaskResult } from '../ai-task-result';
+
 export interface GenerateTextInput {
   prompt: string;
 }
 
 export interface AiProvider {
-  generateText(input: GenerateTextInput): Promise<string>;
+  generateText(input: GenerateTextInput): Promise<AiTaskResult>;
 }
 
 export class AiProviderError extends Error {

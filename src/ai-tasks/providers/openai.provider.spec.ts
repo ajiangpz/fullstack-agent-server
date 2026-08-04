@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import OpenAI from 'openai';
 import { AiProviderError } from './ai-provider';
 import { OpenAiProvider, OpenAiProviderOptions } from './openai.provider';
@@ -20,18 +21,28 @@ describe('OpenAiProvider', () => {
     jest.clearAllMocks();
   });
 
-  it('calls the Responses API and returns trimmed output text', async () => {
-    create.mockResolvedValue({ output_text: ' answer ' });
+  it('requests structured output and returns a validated result', async () => {
+    create.mockResolvedValue({
+      output_text: ' {"answer":"answer","keyPoints":["point"]} ',
+    });
     const provider = new OpenAiProvider(options, client);
 
-    await expect(provider.generateText({ prompt: 'hello' })).resolves.toBe(
-      'answer',
-    );
+    await expect(provider.generateText({ prompt: 'hello' })).resolves.toEqual({
+      answer: 'answer',
+      keyPoints: ['point'],
+    });
     expect(create).toHaveBeenCalledWith({
       model: 'test-model',
       input: 'hello',
       instructions: 'Answer briefly.',
       max_output_tokens: 100,
+      text: {
+        format: expect.objectContaining({
+          type: 'json_schema',
+          name: 'ai_task_result',
+          strict: true,
+        }),
+      },
     });
   });
 
@@ -42,6 +53,46 @@ describe('OpenAiProvider', () => {
     await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
       expect.objectContaining<Partial<AiProviderError>>({
         message: 'OpenAI returned an empty text response',
+        retryable: true,
+      }),
+    );
+  });
+
+  it('rejects JSON that does not match the runtime schema', async () => {
+    create.mockResolvedValue({
+      output_text: '{"answer":"answer","keyPoints":"not-an-array"}',
+    });
+    const provider = new OpenAiProvider(options, client);
+
+    await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
+      expect.objectContaining<Partial<AiProviderError>>({
+        message: expect.stringContaining('AI response validation failed'),
+        retryable: true,
+      }),
+    );
+  });
+
+  it('cleans a fenced JSON response before parsing and validation', async () => {
+    create.mockResolvedValue({
+      output_text: '```json\n{"answer":"answer","keyPoints":["point"]}\n```',
+    });
+    const provider = new OpenAiProvider(options, client);
+
+    await expect(provider.generateText({ prompt: 'hello' })).resolves.toEqual({
+      answer: 'answer',
+      keyPoints: ['point'],
+    });
+  });
+
+  it('rejects JSON mixed with explanatory text', async () => {
+    create.mockResolvedValue({
+      output_text: 'Result: {"answer":"answer","keyPoints":["point"]}',
+    });
+    const provider = new OpenAiProvider(options, client);
+
+    await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
+      expect.objectContaining<Partial<AiProviderError>>({
+        message: 'AI response is not valid JSON',
         retryable: true,
       }),
     );

@@ -38,7 +38,10 @@ describe('AiTaskProcessor', () => {
     prisma.aiTask.update
       .mockResolvedValueOnce({ prompt: 'hello' })
       .mockResolvedValueOnce({});
-    (aiProvider.generateText as jest.Mock).mockResolvedValue('answer');
+    (aiProvider.generateText as jest.Mock).mockResolvedValue({
+      answer: 'answer',
+      keyPoints: ['point'],
+    });
 
     await processor.process(createJob());
 
@@ -55,7 +58,7 @@ describe('AiTaskProcessor', () => {
       where: { id: 'task-1' },
       data: expect.objectContaining({
         status: 'COMPLETED',
-        result: 'answer',
+        result: '{"answer":"answer","keyPoints":["point"]}',
       }),
     });
   });
@@ -67,6 +70,19 @@ describe('AiTaskProcessor', () => {
     );
 
     await expect(processor.process(createJob())).rejects.toThrow('temporary');
+    expect(prisma.aiTask.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not save a provider result that fails runtime validation', async () => {
+    prisma.aiTask.update.mockResolvedValueOnce({ prompt: 'hello' });
+    (aiProvider.generateText as jest.Mock).mockResolvedValue({
+      answer: '',
+      keyPoints: [],
+    });
+
+    await expect(processor.process(createJob())).rejects.toThrow(
+      'AI response validation failed',
+    );
     expect(prisma.aiTask.update).toHaveBeenCalledTimes(1);
   });
 

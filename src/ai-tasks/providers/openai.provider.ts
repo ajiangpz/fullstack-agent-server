@@ -1,4 +1,10 @@
 import OpenAI from 'openai';
+import {
+  AI_TASK_RESULT_JSON_SCHEMA,
+  InvalidAiTaskResultError,
+  parseAiTaskResult,
+  type AiTaskResult,
+} from '../ai-task-result';
 import type { AiProvider, GenerateTextInput } from './ai-provider';
 import { AiProviderError } from './ai-provider';
 
@@ -31,13 +37,21 @@ export class OpenAiProvider implements AiProvider {
       });
   }
 
-  async generateText({ prompt }: GenerateTextInput): Promise<string> {
+  async generateText({ prompt }: GenerateTextInput): Promise<AiTaskResult> {
     try {
       const response = await this.client.responses.create({
         model: this.options.model,
         input: prompt,
         instructions: this.options.instructions,
         max_output_tokens: this.options.maxOutputTokens,
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'ai_task_result',
+            strict: true,
+            schema: AI_TASK_RESULT_JSON_SCHEMA,
+          },
+        },
       });
       const output = response.output_text.trim();
 
@@ -48,10 +62,13 @@ export class OpenAiProvider implements AiProvider {
         );
       }
 
-      return output;
+      return parseAiTaskResult(output);
     } catch (error) {
       if (error instanceof AiProviderError) {
         throw error;
+      }
+      if (error instanceof InvalidAiTaskResultError) {
+        throw new AiProviderError(error.message, true, { cause: error });
       }
       throw this.normalizeError(error);
     }

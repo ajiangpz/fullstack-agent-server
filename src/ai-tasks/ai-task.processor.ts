@@ -2,6 +2,7 @@ import { Inject } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { validateAiTaskResult } from './ai-task-result';
 import { AI_PROVIDER, AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
 import type { AiProvider } from './providers/ai-provider';
 import { AiProviderError } from './providers/ai-provider';
@@ -37,14 +38,16 @@ export class AiTaskProcessor extends WorkerHost {
     });
 
     try {
-      const result = await this.aiProvider.generateText({
-        prompt: task.prompt,
-      });
+      const result = validateAiTaskResult(
+        await this.aiProvider.generateText({
+          prompt: task.prompt,
+        }),
+      );
       await this.prisma.aiTask.update({
         where: { id: job.data.taskId },
         data: {
           status: 'COMPLETED',
-          result,
+          result: JSON.stringify(result),
           errorMessage: null,
           completedAt: new Date(),
         },
