@@ -43,6 +43,16 @@ enum AiTaskStatus {
   FAILED
 }
 
+enum AgentStepType {
+  MODEL_CALL
+}
+
+enum AgentStepStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model AiTask {
   id           String       @id @default(cuid())
   prompt       String       @db.Text
@@ -50,16 +60,36 @@ model AiTask {
   result       String?      @db.Text
   errorMessage String?      @db.Text
   attempts     Int          @default(0)
+  retryCount   Int          @default(0)
   ownerId      Int
   owner        User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   startedAt    DateTime?
   completedAt  DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+  steps        AgentStep[]
 
   @@index([ownerId, createdAt])
   @@index([status])
   @@map("ai_tasks")
+}
+
+model AgentStep {
+  id           String          @id @default(cuid())
+  taskId       String
+  task         AiTask          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  type         AgentStepType
+  status       AgentStepStatus @default(RUNNING)
+  sequence     Int
+  errorMessage String?         @db.Text
+  startedAt    DateTime        @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([taskId, sequence])
+  @@index([taskId, createdAt])
+  @@map("agent_steps")
 }
 
 model AuditLog {

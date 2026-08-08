@@ -1,11 +1,12 @@
 import { Inject } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job, UnrecoverableError } from 'bullmq';
+import { Job } from 'bullmq';
+import { AgentStepType } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { validateAiTaskResult } from './ai-task-result';
 import { AI_PROVIDER, AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
 import type { AiProvider } from './providers/ai-provider';
-import { AiProviderError } from './providers/ai-provider';
+import { AgentStepService } from './agent-step.service';
 
 interface AiTaskJobData {
   taskId: string;
@@ -15,6 +16,7 @@ interface AiTaskJobData {
 export class AiTaskProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly agentSteps: AgentStepService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
   ) {
     super();
@@ -25,8 +27,8 @@ export class AiTaskProcessor extends WorkerHost {
       throw new Error(`Unsupported job type: ${job.name}`);
     }
 
-    const task = await this.prisma.aiTask.update({
-      where: { id: job.data.taskId },
+    const claim = await this.prisma.aiTask.updateMany({
+      where: { id: job.data.taskId, status: 'PENDING' },
       data: {
         status: 'PROCESSING',
         attempts: { increment: 1 },
@@ -34,8 +36,20 @@ export class AiTaskProcessor extends WorkerHost {
         completedAt: null,
         errorMessage: null,
       },
+    });
+
+    if (claim.count === 0) {
+      return;
+    }
+
+    const task = await this.prisma.aiTask.findUniqueOrThrow({
+      where: { id: job.data.taskId },
       select: { prompt: true },
     });
+    const step = await this.agentSteps.createRunning(
+      job.data.taskId,
+      AgentStepType.MODEL_CALL,
+    );
 
     try {
       const result = validateAiTaskResult(
@@ -43,34 +57,20 @@ export class AiTaskProcessor extends WorkerHost {
           prompt: task.prompt,
         }),
       );
-      await this.prisma.aiTask.update({
-        where: { id: job.data.taskId },
-        data: {
-          status: 'COMPLETED',
-          result: JSON.stringify(result),
-          errorMessage: null,
-          completedAt: new Date(),
-        },
-      });
+      await this.agentSteps.complete(
+        step.id,
+        job.data.taskId,
+        JSON.stringify(result),
+      );
     } catch (error) {
       const maxAttempts = job.opts.attempts ?? 1;
-      const retryable = !(error instanceof AiProviderError) || error.retryable;
-      const isFinalAttempt = !retryable || job.attemptsMade + 1 >= maxAttempts;
-
-      if (isFinalAttempt) {
-        await this.prisma.aiTask.update({
-          where: { id: job.data.taskId },
-          data: {
-            status: 'FAILED',
-            errorMessage: this.getErrorMessage(error),
-            completedAt: new Date(),
-          },
-        });
-      }
-
-      if (!retryable) {
-        throw new UnrecoverableError(this.getErrorMessage(error));
-      }
+      const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
+      await this.agentSteps.fail(
+        step.id,
+        job.data.taskId,
+        this.getErrorMessage(error),
+        isFinalAttempt,
+      );
       throw error;
     }
   }

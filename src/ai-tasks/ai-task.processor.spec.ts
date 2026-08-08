@@ -1,16 +1,23 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/unbound-method */
 import type { Job } from 'bullmq';
+import { AgentStepType } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { AgentStepService } from './agent-step.service';
 import { AI_TASK_JOB } from './ai-task.constants';
 import { AiTaskProcessor } from './ai-task.processor';
 import type { AiProvider } from './providers/ai-provider';
-import { AiProviderError } from './providers/ai-provider';
 
 describe('AiTaskProcessor', () => {
   const prisma = {
     aiTask: {
-      update: jest.fn(),
+      updateMany: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
     },
+  };
+  const agentSteps = {
+    createRunning: jest.fn(),
+    complete: jest.fn(),
+    fail: jest.fn(),
   };
   const aiProvider: AiProvider = { generateText: jest.fn() };
   let processor: AiTaskProcessor;
@@ -30,14 +37,15 @@ describe('AiTaskProcessor', () => {
     jest.clearAllMocks();
     processor = new AiTaskProcessor(
       prisma as unknown as PrismaService,
+      agentSteps as unknown as AgentStepService,
       aiProvider,
     );
   });
 
-  it('moves a task from processing to completed', async () => {
-    prisma.aiTask.update
-      .mockResolvedValueOnce({ prompt: 'hello' })
-      .mockResolvedValueOnce({});
+  it('claims a pending task and completes its model-call step', async () => {
+    prisma.aiTask.updateMany.mockResolvedValue({ count: 1 });
+    prisma.aiTask.findUniqueOrThrow.mockResolvedValue({ prompt: 'hello' });
+    agentSteps.createRunning.mockResolvedValue({ id: 'step-1' });
     (aiProvider.generateText as jest.Mock).mockResolvedValue({
       answer: 'answer',
       keyPoints: ['point'],
@@ -45,51 +53,54 @@ describe('AiTaskProcessor', () => {
 
     await processor.process(createJob());
 
-    expect(prisma.aiTask.update).toHaveBeenNthCalledWith(
-      1,
+    expect(prisma.aiTask.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          status: 'PROCESSING',
-          attempts: { increment: 1 },
-        }),
+        where: { id: 'task-1', status: 'PENDING' },
+        data: expect.objectContaining({ status: 'PROCESSING' }),
       }),
     );
-    expect(prisma.aiTask.update).toHaveBeenNthCalledWith(2, {
-      where: { id: 'task-1' },
-      data: expect.objectContaining({
-        status: 'COMPLETED',
-        result: '{"answer":"answer","keyPoints":["point"]}',
-      }),
-    });
+    expect(agentSteps.createRunning).toHaveBeenCalledWith(
+      'task-1',
+      AgentStepType.MODEL_CALL,
+    );
+    expect(agentSteps.complete).toHaveBeenCalledWith(
+      'step-1',
+      'task-1',
+      '{"answer":"answer","keyPoints":["point"]}',
+    );
   });
 
-  it('leaves a retryable failure in processing state', async () => {
-    prisma.aiTask.update.mockResolvedValueOnce({ prompt: 'hello' });
+  it('does nothing when another worker already claimed the task', async () => {
+    prisma.aiTask.updateMany.mockResolvedValue({ count: 0 });
+
+    await processor.process(createJob());
+
+    expect(prisma.aiTask.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(agentSteps.createRunning).not.toHaveBeenCalled();
+    expect(aiProvider.generateText).not.toHaveBeenCalled();
+  });
+
+  it('fails the step, restores the task, and rethrows model errors', async () => {
+    prisma.aiTask.updateMany.mockResolvedValue({ count: 1 });
+    prisma.aiTask.findUniqueOrThrow.mockResolvedValue({ prompt: 'hello' });
+    agentSteps.createRunning.mockResolvedValue({ id: 'step-1' });
     (aiProvider.generateText as jest.Mock).mockRejectedValue(
       new Error('temporary'),
     );
 
     await expect(processor.process(createJob())).rejects.toThrow('temporary');
-    expect(prisma.aiTask.update).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not save a provider result that fails runtime validation', async () => {
-    prisma.aiTask.update.mockResolvedValueOnce({ prompt: 'hello' });
-    (aiProvider.generateText as jest.Mock).mockResolvedValue({
-      answer: '',
-      keyPoints: [],
-    });
-
-    await expect(processor.process(createJob())).rejects.toThrow(
-      'AI response validation failed',
+    expect(agentSteps.fail).toHaveBeenCalledWith(
+      'step-1',
+      'task-1',
+      'temporary',
+      false,
     );
-    expect(prisma.aiTask.update).toHaveBeenCalledTimes(1);
   });
 
-  it('marks a task failed after the final attempt', async () => {
-    prisma.aiTask.update
-      .mockResolvedValueOnce({ prompt: 'hello' })
-      .mockResolvedValueOnce({});
+  it('marks the task as final failure when attempts are exhausted', async () => {
+    prisma.aiTask.updateMany.mockResolvedValue({ count: 1 });
+    prisma.aiTask.findUniqueOrThrow.mockResolvedValue({ prompt: 'hello' });
+    agentSteps.createRunning.mockResolvedValue({ id: 'step-3' });
     (aiProvider.generateText as jest.Mock).mockRejectedValue(
       new Error('permanent'),
     );
@@ -97,32 +108,11 @@ describe('AiTaskProcessor', () => {
     await expect(
       processor.process(createJob({ attemptsMade: 2 })),
     ).rejects.toThrow('permanent');
-    expect(prisma.aiTask.update).toHaveBeenNthCalledWith(2, {
-      where: { id: 'task-1' },
-      data: expect.objectContaining({
-        status: 'FAILED',
-        errorMessage: 'permanent',
-      }),
-    });
-  });
-
-  it('marks a non-retryable provider failure immediately', async () => {
-    prisma.aiTask.update
-      .mockResolvedValueOnce({ prompt: 'hello' })
-      .mockResolvedValueOnce({});
-    (aiProvider.generateText as jest.Mock).mockRejectedValue(
-      new AiProviderError('OpenAI authentication failed', false),
+    expect(agentSteps.fail).toHaveBeenCalledWith(
+      'step-3',
+      'task-1',
+      'permanent',
+      true,
     );
-
-    await expect(processor.process(createJob())).rejects.toThrow(
-      'OpenAI authentication failed',
-    );
-    expect(prisma.aiTask.update).toHaveBeenNthCalledWith(2, {
-      where: { id: 'task-1' },
-      data: expect.objectContaining({
-        status: 'FAILED',
-        errorMessage: 'OpenAI authentication failed',
-      }),
-    });
   });
 });

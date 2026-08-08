@@ -69,10 +69,14 @@ export class AiTasksService {
         result: true,
         errorMessage: true,
         attempts: true,
+        retryCount: true,
         startedAt: true,
         completedAt: true,
         createdAt: true,
         updatedAt: true,
+        steps: {
+          orderBy: { sequence: 'asc' },
+        },
       },
     });
 

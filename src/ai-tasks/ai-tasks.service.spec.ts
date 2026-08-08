@@ -83,6 +83,9 @@ describe('AiTasksService', () => {
     expect(prisma.aiTask.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'task-1', ownerId: user.id },
+        select: expect.objectContaining({
+          steps: { orderBy: { sequence: 'asc' } },
+        }),
       }),
     );
   });
