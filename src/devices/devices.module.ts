@@ -9,5 +9,6 @@ import { DomainEventsModule } from '../events/domain-events.module';
   imports: [PrismaModule, AuthModule, DomainEventsModule],
   controllers: [DevicesController],
   providers: [DevicesService],
+  exports: [DevicesService],
 })
 export class DevicesModule {}

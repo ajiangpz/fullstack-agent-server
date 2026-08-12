@@ -39,6 +39,7 @@ describe('AgentStepService', () => {
         type: AgentStepType.MODEL_CALL,
         status: 'RUNNING',
         sequence: 3,
+        input: null,
       },
     });
   });

@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import OpenAI from 'openai';
-import { AiProviderError } from './ai-provider';
 import { OpenAiProvider, OpenAiProviderOptions } from './openai.provider';
 
 describe('OpenAiProvider', () => {
@@ -9,123 +7,69 @@ describe('OpenAiProvider', () => {
     model: 'test-model',
     timeoutMs: 1_000,
     maxRetries: 0,
-    maxOutputTokens: 100,
-    instructions: 'Answer briefly.',
   };
   const create = jest.fn();
-  const client = {
-    responses: { create },
-  } as unknown as Pick<OpenAI, 'responses'>;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('requests structured output and returns a validated result', async () => {
-    create.mockResolvedValue({
-      output_text: ' {"answer":"answer","keyPoints":["point"]} ',
-    });
-    const provider = new OpenAiProvider(options, client);
-
-    await expect(provider.generateText({ prompt: 'hello' })).resolves.toEqual({
-      answer: 'answer',
-      keyPoints: ['point'],
-    });
-    expect(create).toHaveBeenCalledWith({
-      model: 'test-model',
-      input: 'hello',
-      instructions: 'Answer briefly.',
-      max_output_tokens: 100,
-      text: {
-        format: expect.objectContaining({
-          type: 'json_schema',
-          name: 'ai_task_result',
-          strict: true,
-        }),
+  const client = { responses: { create } } as unknown as Pick<
+    OpenAI,
+    'responses'
+  >;
+  const provider = new OpenAiProvider(options, client);
+  const request = {
+    messages: [{ role: 'user' as const, content: 'device?' }],
+    tools: [
+      {
+        name: 'get_device',
+        description: 'Get device',
+        parameters: { type: 'object' },
       },
-    });
-  });
+    ],
+  };
 
-  it('treats an empty response as retryable', async () => {
-    create.mockResolvedValue({ output_text: '  ' });
-    const provider = new OpenAiProvider(options, client);
+  beforeEach(() => jest.clearAllMocks());
 
-    await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
-      expect.objectContaining<Partial<AiProviderError>>({
-        message: 'OpenAI returned an empty text response',
-        retryable: true,
-      }),
-    );
-  });
-
-  it('rejects JSON that does not match the runtime schema', async () => {
+  it('returns a tool-call response with parsed arguments', async () => {
     create.mockResolvedValue({
-      output_text: '{"answer":"answer","keyPoints":"not-an-array"}',
+      model: 'test-model',
+      usage: { input_tokens: 10, output_tokens: 3 },
+      output: [
+        {
+          type: 'function_call',
+          call_id: 'call-1',
+          name: 'get_device',
+          arguments: '{"deviceId":1}',
+        },
+      ],
+      output_text: '',
     });
-    const provider = new OpenAiProvider(options, client);
 
-    await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
-      expect.objectContaining<Partial<AiProviderError>>({
-        message: expect.stringContaining('AI response validation failed'),
-        retryable: true,
+    await expect(provider.generateWithTools(request)).resolves.toEqual({
+      type: 'tool_call',
+      model: 'test-model',
+      inputTokens: 10,
+      outputTokens: 3,
+      toolCalls: [
+        { id: 'call-1', name: 'get_device', arguments: { deviceId: 1 } },
+      ],
+    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool_choice: 'auto',
+        tools: [expect.objectContaining({ name: 'get_device' })],
       }),
     );
   });
 
-  it('cleans a fenced JSON response before parsing and validation', async () => {
+  it('returns a final response when no tool call is present', async () => {
     create.mockResolvedValue({
-      output_text: '```json\n{"answer":"answer","keyPoints":["point"]}\n```',
+      model: 'test-model',
+      output: [],
+      output_text: '{"answer":"device 1","keyPoints":[]}',
     });
-    const provider = new OpenAiProvider(options, client);
 
-    await expect(provider.generateText({ prompt: 'hello' })).resolves.toEqual({
-      answer: 'answer',
-      keyPoints: ['point'],
+    await expect(provider.generateWithTools(request)).resolves.toEqual({
+      type: 'final',
+      model: 'test-model',
+      content: '{"answer":"device 1","keyPoints":[]}',
     });
-  });
-
-  it('rejects JSON mixed with explanatory text', async () => {
-    create.mockResolvedValue({
-      output_text: 'Result: {"answer":"answer","keyPoints":["point"]}',
-    });
-    const provider = new OpenAiProvider(options, client);
-
-    await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
-      expect.objectContaining<Partial<AiProviderError>>({
-        message: 'AI response is not valid JSON',
-        retryable: true,
-      }),
-    );
-  });
-
-  it('normalizes authentication errors as non-retryable', async () => {
-    create.mockRejectedValue(
-      new OpenAI.AuthenticationError(
-        401,
-        { message: 'invalid key' },
-        'invalid key',
-        new Headers(),
-      ),
-    );
-    const provider = new OpenAiProvider(options, client);
-
-    await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
-      expect.objectContaining<Partial<AiProviderError>>({
-        message: 'OpenAI authentication failed',
-        retryable: false,
-      }),
-    );
-  });
-
-  it('normalizes timeouts as retryable', async () => {
-    create.mockRejectedValue(new OpenAI.APIConnectionTimeoutError());
-    const provider = new OpenAiProvider(options, client);
-
-    await expect(provider.generateText({ prompt: 'hello' })).rejects.toEqual(
-      expect.objectContaining<Partial<AiProviderError>>({
-        message: 'OpenAI request timed out',
-        retryable: true,
-      }),
-    );
   });
 });

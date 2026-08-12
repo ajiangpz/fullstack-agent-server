@@ -45,6 +45,9 @@ enum AiTaskStatus {
 
 enum AgentStepType {
   MODEL_CALL
+  TOOL_CALL
+  TOOL_RESULT
+  FINAL_ANSWER
 }
 
 enum AgentStepStatus {
@@ -81,6 +84,8 @@ model AgentStep {
   type         AgentStepType
   status       AgentStepStatus @default(RUNNING)
   sequence     Int
+  input        String?         @db.Text
+  output       String?         @db.Text
   errorMessage String?         @db.Text
   startedAt    DateTime        @default(now())
   completedAt  DateTime?

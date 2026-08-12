@@ -1,11 +1,45 @@
-import type { AiTaskResult } from '../ai-task-result';
+export interface AiMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+}
 
-export interface GenerateTextInput {
-  prompt: string;
+export interface AiToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+export interface AiToolCall {
+  id: string;
+  name: string;
+  arguments: unknown;
+}
+
+interface AiResponseMetadata {
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+export interface AiFinalResponse extends AiResponseMetadata {
+  type: 'final';
+  content: string;
+}
+
+export interface AiToolCallResponse extends AiResponseMetadata {
+  type: 'tool_call';
+  toolCalls: AiToolCall[];
+}
+
+export type AiResponse = AiFinalResponse | AiToolCallResponse;
+
+export interface AiGenerateWithToolsOptions {
+  messages: AiMessage[];
+  tools: AiToolDefinition[];
 }
 
 export interface AiProvider {
-  generateText(input: GenerateTextInput): Promise<AiTaskResult>;
+  generateWithTools(options: AiGenerateWithToolsOptions): Promise<AiResponse>;
 }
 
 export class AiProviderError extends Error {

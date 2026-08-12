@@ -1,4 +1,9 @@
-CREATE TYPE "AgentStepType" AS ENUM ('MODEL_CALL');
+CREATE TYPE "AgentStepType" AS ENUM (
+  'MODEL_CALL',
+  'TOOL_CALL',
+  'TOOL_RESULT',
+  'FINAL_ANSWER'
+);
 
 CREATE TYPE "AgentStepStatus" AS ENUM ('RUNNING', 'COMPLETED', 'FAILED');
 
@@ -11,6 +16,8 @@ CREATE TABLE "agent_steps" (
   "type" "AgentStepType" NOT NULL,
   "status" "AgentStepStatus" NOT NULL DEFAULT 'RUNNING',
   "sequence" INTEGER NOT NULL,
+  "input" TEXT,
+  "output" TEXT,
   "errorMessage" TEXT,
   "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "completedAt" TIMESTAMP(3),
