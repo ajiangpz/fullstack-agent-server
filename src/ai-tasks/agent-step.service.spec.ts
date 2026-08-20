@@ -2,83 +2,56 @@
 import { AgentStepType } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentStepService } from './agent-step.service';
+import { LeaseLostError } from './task-lease.service';
 
 describe('AgentStepService', () => {
-  const transactionClient = {
-    agentStep: {
-      findFirst: jest.fn(),
-      create: jest.fn(),
-    },
+  const tx = {
+    agentStep: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    aiTask: { findFirst: jest.fn(), update: jest.fn() },
   };
   const prisma = {
-    $transaction: jest.fn(),
-    agentStep: { update: jest.fn() },
-    aiTask: { update: jest.fn() },
+    $transaction: jest.fn((callback) => callback(tx)),
+    aiTask: { updateMany: jest.fn() },
   };
+  const ownership = { taskId: 'task-1', leaseToken: 'token-1' };
   let service: AgentStepService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.$transaction.mockImplementation((value) =>
-      typeof value === 'function'
-        ? value(transactionClient)
-        : Promise.all(value),
-    );
+    tx.aiTask.findFirst.mockResolvedValue({ id: 'task-1' });
     service = new AgentStepService(prisma as unknown as PrismaService);
   });
 
-  it('calculates the next sequence from the latest task step', async () => {
-    transactionClient.agentStep.findFirst.mockResolvedValue({ sequence: 2 });
-    transactionClient.agentStep.create.mockResolvedValue({ id: 'step-3' });
-
-    await service.createRunning('task-1', AgentStepType.MODEL_CALL);
-
-    expect(transactionClient.agentStep.create).toHaveBeenCalledWith({
-      data: {
-        taskId: 'task-1',
-        type: AgentStepType.MODEL_CALL,
-        status: 'RUNNING',
-        sequence: 3,
-        input: null,
-      },
+  it('creates the next step only while the lease token is owned', async () => {
+    tx.agentStep.findFirst.mockResolvedValue({ sequence: 2 });
+    tx.agentStep.create.mockResolvedValue({ id: 'step-3' });
+    await service.createRunning(ownership, AgentStepType.MODEL_CALL);
+    expect(tx.aiTask.findFirst).toHaveBeenCalledWith({
+      where: { id: 'task-1', leaseToken: 'token-1', status: 'PROCESSING' },
+      select: { id: true },
+    });
+    expect(tx.agentStep.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ taskId: 'task-1', sequence: 3 }),
     });
   });
 
-  it('marks a failed step and restores the task for retry', async () => {
-    prisma.agentStep.update.mockResolvedValue({});
-    prisma.aiTask.update.mockResolvedValue({});
-
-    await service.fail('step-1', 'task-1', 'temporary', false);
-
-    expect(prisma.agentStep.update).toHaveBeenCalledWith({
-      where: { id: 'step-1' },
-      data: expect.objectContaining({
-        status: 'FAILED',
-        errorMessage: 'temporary',
-      }),
-    });
-    expect(prisma.aiTask.update).toHaveBeenCalledWith({
-      where: { id: 'task-1' },
-      data: expect.objectContaining({
-        status: 'PENDING',
-        retryCount: { increment: 1 },
-      }),
-    });
+  it('stops writes after ownership is lost', async () => {
+    tx.aiTask.findFirst.mockResolvedValue(null);
+    await expect(
+      service.createRunning(ownership, AgentStepType.MODEL_CALL),
+    ).rejects.toBeInstanceOf(LeaseLostError);
+    expect(tx.agentStep.create).not.toHaveBeenCalled();
   });
 
-  it('marks the task failed after the final attempt', async () => {
-    prisma.agentStep.update.mockResolvedValue({});
-    prisma.aiTask.update.mockResolvedValue({});
-
-    await service.fail('step-3', 'task-1', 'permanent', true);
-
-    expect(prisma.aiTask.update).toHaveBeenCalledWith({
+  it('clears the lease when a task completes', async () => {
+    await service.completeTask('step-1', ownership, '{"answer":"ok"}');
+    expect(tx.aiTask.update).toHaveBeenCalledWith({
       where: { id: 'task-1' },
       data: expect.objectContaining({
-        status: 'FAILED',
-        errorMessage: 'permanent',
-        retryCount: { increment: 1 },
-        completedAt: expect.any(Date),
+        status: 'COMPLETED',
+        lockedBy: null,
+        leaseToken: null,
+        leaseExpiresAt: null,
       }),
     });
   });

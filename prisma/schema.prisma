@@ -64,6 +64,9 @@ model AiTask {
   errorMessage String?      @db.Text
   attempts     Int          @default(0)
   retryCount   Int          @default(0)
+  lockedBy     String?      @db.VarChar(255)
+  leaseToken   String?      @unique @db.Uuid
+  leaseExpiresAt DateTime?
   ownerId      Int
   owner        User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   startedAt    DateTime?
@@ -74,6 +77,7 @@ model AiTask {
 
   @@index([ownerId, createdAt])
   @@index([status])
+  @@index([status, leaseExpiresAt])
   @@map("ai_tasks")
 }
 

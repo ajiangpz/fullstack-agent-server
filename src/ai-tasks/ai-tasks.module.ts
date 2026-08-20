@@ -12,6 +12,7 @@ import { AgentService } from './agent.service';
 import { createAiProvider } from './providers/ai-provider.factory';
 import { GetDeviceTool } from './tools/get-device.tool';
 import { ToolRegistry } from './tool-registry';
+import { TaskLeaseService } from './task-lease.service';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ToolRegistry } from './tool-registry';
     AgentStepService,
     GetDeviceTool,
     ToolRegistry,
+    TaskLeaseService,
     { provide: AI_PROVIDER, useFactory: createAiProvider },
   ],
 })

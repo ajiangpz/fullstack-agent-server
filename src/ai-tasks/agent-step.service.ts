@@ -1,23 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { AgentStepType } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { LeaseLostError, type TaskLease } from './task-lease.service';
+
+type Ownership = TaskLease | { taskId: string; leaseToken: string };
 
 @Injectable()
 export class AgentStepService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createRunning(taskId: string, type: AgentStepType, input?: unknown) {
-    // sequence 的读取和创建放在同一事务中，保持单个任务步骤顺序连续。
+  async createRunning(
+    ownership: Ownership,
+    type: AgentStepType,
+    input?: unknown,
+  ) {
     return this.prisma.$transaction(async (tx) => {
+      await this.assertOwnership(tx, ownership);
       const lastStep = await tx.agentStep.findFirst({
-        where: { taskId },
+        where: { taskId: ownership.taskId },
         orderBy: { sequence: 'desc' },
         select: { sequence: true },
       });
-
       return tx.agentStep.create({
         data: {
-          taskId,
+          taskId: ownership.taskId,
           type,
           status: 'RUNNING',
           sequence: (lastStep?.sequence ?? 0) + 1,
@@ -27,87 +33,92 @@ export class AgentStepService {
     });
   }
 
-  async completeStep(stepId: string, output?: unknown) {
-    return this.prisma.agentStep.update({
-      where: { id: stepId },
-      data: {
-        status: 'COMPLETED',
-        output: output === undefined ? null : JSON.stringify(output),
-        completedAt: new Date(),
-        errorMessage: null,
-      },
+  async completeStep(stepId: string, ownership: Ownership, output?: unknown) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.assertOwnership(tx, ownership);
+      return tx.agentStep.update({
+        where: { id: stepId, taskId: ownership.taskId },
+        data: {
+          status: 'COMPLETED',
+          output: output === undefined ? null : JSON.stringify(output),
+          completedAt: new Date(),
+          errorMessage: null,
+        },
+      });
     });
   }
 
-  async completeTask(stepId: string, taskId: string, result: string) {
+  async completeTask(stepId: string, ownership: Ownership, result: string) {
     const completedAt = new Date();
-    return this.prisma.$transaction([
-      this.prisma.agentStep.update({
-        where: { id: stepId },
+    return this.prisma.$transaction(async (tx) => {
+      await this.assertOwnership(tx, ownership);
+      await tx.agentStep.update({
+        where: { id: stepId, taskId: ownership.taskId },
         data: {
           status: 'COMPLETED',
           output: result,
           completedAt,
           errorMessage: null,
         },
-      }),
-      this.prisma.aiTask.update({
-        where: { id: taskId },
+      });
+      return tx.aiTask.update({
+        where: { id: ownership.taskId },
         data: {
           status: 'COMPLETED',
           result,
           errorMessage: null,
           completedAt,
+          lockedBy: null,
+          leaseToken: null,
+          leaseExpiresAt: null,
         },
-      }),
-    ]);
+      });
+    });
   }
 
-  async failStep(stepId: string, errorMessage: string) {
-    return this.prisma.agentStep.update({
-      where: { id: stepId },
-      data: { status: 'FAILED', errorMessage, completedAt: new Date() },
+  async failStep(stepId: string, ownership: Ownership, errorMessage: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.assertOwnership(tx, ownership);
+      return tx.agentStep.update({
+        where: { id: stepId, taskId: ownership.taskId },
+        data: { status: 'FAILED', errorMessage, completedAt: new Date() },
+      });
     });
   }
 
   async failTask(
-    taskId: string,
+    lease: TaskLease,
     errorMessage: string,
     isFinalAttempt: boolean,
   ) {
-    const completedAt = new Date();
-    return this.prisma.aiTask.update({
-      where: { id: taskId },
+    const failed = await this.prisma.aiTask.updateMany({
+      where: {
+        id: lease.taskId,
+        leaseToken: lease.token,
+        status: 'PROCESSING',
+      },
       data: {
         status: isFinalAttempt ? 'FAILED' : 'PENDING',
         errorMessage,
         retryCount: { increment: 1 },
-        completedAt: isFinalAttempt ? completedAt : null,
+        completedAt: isFinalAttempt ? new Date() : null,
+        lockedBy: null,
+        leaseToken: null,
+        leaseExpiresAt: null,
       },
     });
+    return failed.count === 1;
   }
 
-  async fail(
-    stepId: string,
-    taskId: string,
-    errorMessage: string,
-    isFinalAttempt: boolean,
-  ) {
-    const completedAt = new Date();
-    return this.prisma.$transaction([
-      this.prisma.agentStep.update({
-        where: { id: stepId },
-        data: { status: 'FAILED', errorMessage, completedAt },
-      }),
-      this.prisma.aiTask.update({
-        where: { id: taskId },
-        data: {
-          status: isFinalAttempt ? 'FAILED' : 'PENDING',
-          errorMessage,
-          retryCount: { increment: 1 },
-          completedAt: isFinalAttempt ? completedAt : null,
-        },
-      }),
-    ]);
+  private async assertOwnership(
+    tx: Pick<PrismaService, 'aiTask'>,
+    ownership: Ownership,
+  ): Promise<void> {
+    const token = 'token' in ownership ? ownership.token : ownership.leaseToken;
+    const task = await tx.aiTask.findFirst({
+      where: { id: ownership.taskId, leaseToken: token, status: 'PROCESSING' },
+      select: { id: true },
+    });
+    if (!task) throw new LeaseLostError();
   }
 }

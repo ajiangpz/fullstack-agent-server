@@ -24,6 +24,8 @@ describe('AgentService', () => {
   };
   const context = {
     taskId: 'task-1',
+    leaseToken: 'token-1',
+    signal: new AbortController().signal,
     user: {
       id: 7,
       username: 'user',
@@ -78,7 +80,7 @@ describe('AgentService', () => {
     expect(aiProvider.generateWithTools).toHaveBeenCalledTimes(2);
     expect(agentSteps.completeTask).toHaveBeenCalledWith(
       'final',
-      'task-1',
+      context,
       '{"answer":"offline","keyPoints":["device 1"]}',
     );
   });
@@ -106,6 +108,7 @@ describe('AgentService', () => {
 
     expect(agentSteps.failStep).toHaveBeenCalledWith(
       'tool-call',
+      context,
       'Invalid tool arguments',
     );
     expect(aiProvider.generateWithTools).toHaveBeenNthCalledWith(

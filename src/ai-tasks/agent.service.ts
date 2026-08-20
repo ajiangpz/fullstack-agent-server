@@ -10,6 +10,7 @@ import type {
 } from './providers/ai-provider';
 import { ToolRegistry } from './tool-registry';
 import type { AgentContext } from './tools/agent-tool.interface';
+import { LeaseLostError } from './task-lease.service';
 
 @Injectable()
 export class AgentService {
@@ -35,8 +36,9 @@ export class AgentService {
     }));
 
     for (let index = 0; index < this.maxSteps; index++) {
+      this.assertActive(context);
       const modelStep = await this.agentSteps.createRunning(
-        context.taskId,
+        context,
         AgentStepType.MODEL_CALL,
         { messageCount: conversation.length },
       );
@@ -47,26 +49,31 @@ export class AgentService {
           messages: conversation,
           tools,
         });
-        await this.agentSteps.completeStep(modelStep.id, {
+        this.assertActive(context);
+        await this.agentSteps.completeStep(modelStep.id, context, {
           responseType: response.type,
           model: response.model,
           inputTokens: response.inputTokens,
           outputTokens: response.outputTokens,
         });
       } catch (error) {
-        await this.agentSteps.failStep(modelStep.id, this.errorMessage(error));
+        await this.agentSteps.failStep(
+          modelStep.id,
+          context,
+          this.errorMessage(error),
+        );
         throw error;
       }
 
       if (response.type === 'final') {
         const result = parseAiTaskResult(response.content);
         const finalStep = await this.agentSteps.createRunning(
-          context.taskId,
+          context,
           AgentStepType.FINAL_ANSWER,
         );
         await this.agentSteps.completeTask(
           finalStep.id,
-          context.taskId,
+          context,
           JSON.stringify(result),
         );
         return result;
@@ -78,7 +85,7 @@ export class AgentService {
       }
       const tool = this.toolRegistry.get(toolCall.name);
       const toolStep = await this.agentSteps.createRunning(
-        context.taskId,
+        context,
         AgentStepType.TOOL_CALL,
         { toolCallId: toolCall.id, arguments: toolCall.arguments },
       );
@@ -86,7 +93,11 @@ export class AgentService {
 
       if (!parsed.success) {
         // 参数错误属于模型可自行修正的问题，将错误反馈给下一轮而不终止任务。
-        await this.agentSteps.failStep(toolStep.id, 'Invalid tool arguments');
+        await this.agentSteps.failStep(
+          toolStep.id,
+          context,
+          'Invalid tool arguments',
+        );
         conversation.push(
           this.toolMessage(toolCall.id, {
             success: false,
@@ -98,10 +109,21 @@ export class AgentService {
 
       let toolResult: unknown;
       try {
+        this.assertActive(context);
         toolResult = await tool.execute(parsed.data, context);
-        await this.agentSteps.completeStep(toolStep.id, { success: true });
+        this.assertActive(context);
+        await this.agentSteps.completeStep(toolStep.id, context, {
+          success: true,
+        });
       } catch (error) {
-        await this.agentSteps.failStep(toolStep.id, this.errorMessage(error));
+        if (error instanceof LeaseLostError || context.signal.aborted) {
+          throw new LeaseLostError();
+        }
+        await this.agentSteps.failStep(
+          toolStep.id,
+          context,
+          this.errorMessage(error),
+        );
         // 不把内部异常细节交给模型，避免泄露数据库或服务实现信息。
         conversation.push(
           this.toolMessage(toolCall.id, {
@@ -113,10 +135,12 @@ export class AgentService {
       }
 
       const resultStep = await this.agentSteps.createRunning(
-        context.taskId,
+        context,
         AgentStepType.TOOL_RESULT,
       );
-      await this.agentSteps.completeStep(resultStep.id, { result: toolResult });
+      await this.agentSteps.completeStep(resultStep.id, context, {
+        result: toolResult,
+      });
       // 同时补充工具请求和结果，使下一轮模型拥有完整的调用上下文。
       conversation.push({
         role: 'assistant',
@@ -143,5 +167,9 @@ export class AgentService {
     return (
       error instanceof Error ? error.message : 'Unknown agent error'
     ).slice(0, 2_000);
+  }
+
+  private assertActive(context: AgentContext): void {
+    if (context.signal.aborted) throw new LeaseLostError();
   }
 }

@@ -5,6 +5,8 @@ export interface AgentContext {
   // 用户身份由 Worker 从数据库加载，不能使用模型或客户端提供的身份信息。
   user: AuthenticatedUser;
   taskId: string;
+  leaseToken: string;
+  signal: AbortSignal;
 }
 
 export interface AgentTool<

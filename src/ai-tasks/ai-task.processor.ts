@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AgentService } from './agent.service';
 import { AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
 import { AgentStepService } from './agent-step.service';
+import { LeaseLostError, TaskLeaseService } from './task-lease.service';
 
 interface AiTaskJobData {
   taskId: string;
@@ -15,6 +16,7 @@ export class AiTaskProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly agent: AgentService,
     private readonly agentSteps: AgentStepService,
+    private readonly leases: TaskLeaseService,
   ) {
     super();
   }
@@ -24,31 +26,30 @@ export class AiTaskProcessor extends WorkerHost {
       throw new Error(`Unsupported job type: ${job.name}`);
     }
 
-    // 条件更新充当任务抢占，确保同一任务不会被多个 Worker 重复执行。
-    const claim = await this.prisma.aiTask.updateMany({
-      where: { id: job.data.taskId, status: 'PENDING' },
-      data: {
-        status: 'PROCESSING',
-        attempts: { increment: 1 },
-        startedAt: new Date(),
-        completedAt: null,
-        errorMessage: null,
-      },
-    });
-    if (claim.count === 0) return;
-
-    // Agent 使用的身份必须来自数据库中的任务 owner，而不是队列载荷。
-    const task = await this.prisma.aiTask.findUniqueOrThrow({
-      where: { id: job.data.taskId },
-      select: {
-        prompt: true,
-        owner: {
-          select: { id: true, username: true, email: true, role: true },
-        },
-      },
-    });
+    const lease = await this.leases.acquire(job.data.taskId);
+    if (!lease) return;
+    const abortController = new AbortController();
+    const heartbeat = setInterval(() => {
+      void this.leases
+        .heartbeat(lease)
+        .then((owned) => {
+          if (!owned) abortController.abort();
+        })
+        .catch(() => abortController.abort());
+    }, TaskLeaseService.heartbeatIntervalMs);
+    heartbeat.unref();
 
     try {
+      // Agent 使用的身份必须来自数据库中的任务 owner，而不是队列载荷。
+      const task = await this.prisma.aiTask.findFirstOrThrow({
+        where: { id: job.data.taskId, leaseToken: lease.token },
+        select: {
+          prompt: true,
+          owner: {
+            select: { id: true, username: true, email: true, role: true },
+          },
+        },
+      });
       await this.agent.run(
         [
           {
@@ -58,16 +59,27 @@ export class AiTaskProcessor extends WorkerHost {
           },
           { role: 'user', content: task.prompt },
         ],
-        { taskId: job.data.taskId, user: task.owner },
+        {
+          taskId: job.data.taskId,
+          user: task.owner,
+          leaseToken: lease.token,
+          signal: abortController.signal,
+        },
       );
     } catch (error) {
+      if (error instanceof LeaseLostError || abortController.signal.aborted) {
+        return;
+      }
       const maxAttempts = job.opts.attempts ?? 1;
-      await this.agentSteps.failTask(
-        job.data.taskId,
+      const failed = await this.agentSteps.failTask(
+        lease,
         this.errorMessage(error),
         job.attemptsMade + 1 >= maxAttempts,
       );
+      if (!failed) return;
       throw error;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 
