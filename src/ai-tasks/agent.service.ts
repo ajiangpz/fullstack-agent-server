@@ -87,7 +87,11 @@ export class AgentService {
       const toolStep = await this.agentSteps.createRunning(
         context,
         AgentStepType.TOOL_CALL,
-        { toolCallId: toolCall.id, arguments: toolCall.arguments },
+        {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+        },
       );
       const parsed = tool.schema.safeParse(toolCall.arguments);
 

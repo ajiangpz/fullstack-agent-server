@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/unbound-method */
-import { UserRole } from '../generated/prisma/enums';
+import { AgentStepType, UserRole } from '../generated/prisma/enums';
 import { AgentService } from './agent.service';
 import { AgentStepService } from './agent-step.service';
 import type { AiProvider } from './providers/ai-provider';
@@ -76,6 +76,15 @@ describe('AgentService', () => {
       service.run([{ role: 'user', content: 'device?' }], context),
     ).resolves.toEqual({ answer: 'offline', keyPoints: ['device 1'] });
 
+    expect(agentSteps.createRunning).toHaveBeenCalledWith(
+      context,
+      AgentStepType.TOOL_CALL,
+      {
+        toolCallId: 'call-1',
+        name: 'get_device',
+        arguments: { deviceId: 1 },
+      },
+    );
     expect(tool.execute).toHaveBeenCalledWith({ deviceId: 1 }, context);
     expect(aiProvider.generateWithTools).toHaveBeenCalledTimes(2);
     expect(agentSteps.completeTask).toHaveBeenCalledWith(

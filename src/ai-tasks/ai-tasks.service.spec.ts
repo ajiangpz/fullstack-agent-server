@@ -77,13 +77,14 @@ describe('AiTasksService', () => {
     });
   });
 
-  it('limits task lookup to the current user', async () => {
+  it('limits task lookup to the current user and returns trace context', async () => {
     prisma.aiTask.findFirst.mockResolvedValue({ id: 'task-1' });
     await service.findOne('task-1', user);
     expect(prisma.aiTask.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'task-1', ownerId: user.id },
         select: expect.objectContaining({
+          prompt: true,
           steps: { orderBy: { sequence: 'asc' } },
         }),
       }),

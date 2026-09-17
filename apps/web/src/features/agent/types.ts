@@ -24,6 +24,7 @@ export interface AgentStep {
 
 export interface AiTask {
   id: string;
+  prompt: string;
   status: AiTaskStatus;
   result: string | null;
   errorMessage: string | null;
