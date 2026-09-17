@@ -9,11 +9,18 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableShutdownHooks();
+  const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3001')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: (process.env.WEB_ORIGIN ?? 'http://localhost:3001')
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    origin: allowedOrigins,
+    // 如果前端需要携带 Cookie 或者凭证，请保持为 true
+    credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Authorization, Accept, X-Requested-With',
+    exposedHeaders: 'Authorization',
   });
 
   const config = new DocumentBuilder()
