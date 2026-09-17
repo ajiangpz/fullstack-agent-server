@@ -65,6 +65,7 @@ export class AiTasksService {
       },
       select: {
         id: true,
+        prompt: true,
         status: true,
         result: true,
         errorMessage: true,
