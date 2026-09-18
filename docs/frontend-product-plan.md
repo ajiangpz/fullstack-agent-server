@@ -65,6 +65,11 @@
 - Retry
 - Task Lease
 - Heartbeat
+- 持久化 Conversation / ConversationMessage
+- 每个 Conversation 同时最多一个运行中 Task
+- 多轮 user / assistant 历史上下文
+- 历史上下文最多 20 条消息 / 12,000 字符
+- 浏览器恢复当前 Conversation
 
 ### 2.4 Agent Runtime
 
@@ -337,6 +342,16 @@ Updated         2026-09-17
 - Tool Call
 - Tool Result
 - Final Answer
+
+当前多轮会话实现：
+
+- 首次发送时创建 Conversation，后续 Task 复用同一 conversationId。
+- User / Assistant 消息持久化到 ConversationMessage。
+- 同一 Conversation 串行执行，运行中禁止提交下一条消息。
+- Processor 仅加载已完成回合，并对模型历史做 20 条消息 / 12,000 字符裁剪。
+- 刷新页面后通过 localStorage 恢复当前 Conversation 和 active Task。
+- Task SSE 继续保持 Task 维度，任务终态后刷新 Conversation messages。
+- 当前版本不包含 LLM 历史摘要，后续可扩展 summary + recent messages。
 
 ---
 
