@@ -7,12 +7,29 @@ import { LeaseLostError } from './task-lease.service';
 
 describe('AgentStepService', () => {
   const tx = {
-    agentStep: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-    aiTask: { findFirst: jest.fn(), update: jest.fn() },
+    agentStep: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    aiTask: {
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    conversationMessage: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
+    conversation: {
+      update: jest.fn(),
+    },
   };
   const prisma = {
-    $transaction: jest.fn((callback) => callback(tx)),
-    aiTask: { updateMany: jest.fn(), findUnique: jest.fn() },
+    $transaction: jest.fn(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+    ),
   };
   const events = { publish: jest.fn().mockResolvedValue(true) };
   const ownership = { taskId: 'task-1', leaseToken: 'token-1' };
@@ -21,7 +38,11 @@ describe('AgentStepService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     tx.aiTask.findFirst.mockResolvedValue({ id: 'task-1' });
+    tx.conversationMessage.findFirst.mockResolvedValue({ sequence: 1 });
+    tx.conversationMessage.create.mockResolvedValue({});
+    tx.conversation.update.mockResolvedValue({});
     events.publish.mockResolvedValue(true);
+
     service = new AgentStepService(
       prisma as unknown as PrismaService,
       events as unknown as AiTaskEventBus,
@@ -31,7 +52,9 @@ describe('AgentStepService', () => {
   it('creates the next step only while the lease token is owned', async () => {
     tx.agentStep.findFirst.mockResolvedValue({ sequence: 2 });
     tx.agentStep.create.mockResolvedValue({ id: 'step-3' });
+
     await service.createRunning(ownership, AgentStepType.MODEL_CALL);
+
     expect(tx.aiTask.findFirst).toHaveBeenCalledWith({
       where: { id: 'task-1', leaseToken: 'token-1', status: 'PROCESSING' },
       select: { id: true },
@@ -46,21 +69,31 @@ describe('AgentStepService', () => {
 
   it('stops writes after ownership is lost', async () => {
     tx.aiTask.findFirst.mockResolvedValue(null);
+
     await expect(
       service.createRunning(ownership, AgentStepType.MODEL_CALL),
     ).rejects.toBeInstanceOf(LeaseLostError);
+
     expect(tx.agentStep.create).not.toHaveBeenCalled();
     expect(events.publish).not.toHaveBeenCalled();
   });
 
-  it('clears the lease and publishes terminal task state when a task completes', async () => {
+  it('completes the task, writes the assistant message, and releases the conversation atomically', async () => {
     tx.agentStep.update.mockResolvedValue({
       id: 'step-1',
       status: 'COMPLETED',
     });
-    tx.aiTask.update.mockResolvedValue({ id: 'task-1', status: 'COMPLETED' });
+    tx.aiTask.update.mockResolvedValue({
+      id: 'task-1',
+      conversationId: 'conv-1',
+      status: 'COMPLETED',
+    });
 
-    await service.completeTask('step-1', ownership, '{"answer":"ok"}');
+    await service.completeTask(
+      'step-1',
+      ownership,
+      '{"answer":"offline","keyPoints":[]}',
+    );
 
     expect(tx.aiTask.update).toHaveBeenCalledWith({
       where: { id: 'task-1' },
@@ -70,10 +103,82 @@ describe('AgentStepService', () => {
         leaseToken: null,
         leaseExpiresAt: null,
       }),
+      select: expect.objectContaining({
+        conversationId: true,
+        status: true,
+      }),
     });
-    expect(events.publish).toHaveBeenCalledWith('task-1', 'task.completed', {
+    expect(tx.conversationMessage.create).toHaveBeenCalledWith({
+      data: {
+        conversationId: 'conv-1',
+        taskId: 'task-1',
+        role: 'ASSISTANT',
+        content: 'offline',
+        sequence: 2,
+      },
+    });
+    expect(tx.conversation.update).toHaveBeenCalledWith({
+      where: { id: 'conv-1' },
+      data: { busy: false },
+    });
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'task.completed',
+      expect.objectContaining({
+        id: 'task-1',
+        status: 'COMPLETED',
+      }),
+    );
+  });
+
+  it('releases the conversation when the final task attempt fails', async () => {
+    tx.aiTask.updateMany.mockResolvedValue({ count: 1 });
+    tx.aiTask.findUnique.mockResolvedValue({
       id: 'task-1',
-      status: 'COMPLETED',
+      conversationId: 'conv-1',
+      status: 'FAILED',
     });
+
+    await expect(
+      service.failTask(
+        { taskId: 'task-1', token: 'token-1' },
+        'provider down',
+        true,
+      ),
+    ).resolves.toBe(true);
+
+    expect(tx.conversation.update).toHaveBeenCalledWith({
+      where: { id: 'conv-1' },
+      data: { busy: false },
+    });
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'task.failed',
+      expect.objectContaining({ status: 'FAILED' }),
+    );
+  });
+
+  it('keeps the conversation busy while BullMQ will retry the task', async () => {
+    tx.aiTask.updateMany.mockResolvedValue({ count: 1 });
+    tx.aiTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      conversationId: 'conv-1',
+      status: 'PENDING',
+    });
+
+    await expect(
+      service.failTask(
+        { taskId: 'task-1', token: 'token-1' },
+        'provider down',
+        false,
+      ),
+    ).resolves.toBe(true);
+
+    expect(tx.conversation.update).not.toHaveBeenCalled();
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'task.updated',
+      expect.objectContaining({ status: 'PENDING' }),
+    );
   });
 });

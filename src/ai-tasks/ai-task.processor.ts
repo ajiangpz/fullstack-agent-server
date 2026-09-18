@@ -1,5 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
+import { ConversationContextService } from '../conversations/conversation-context.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentService } from './agent.service';
 import { AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
@@ -17,6 +18,7 @@ export class AiTaskProcessor extends WorkerHost {
     private readonly agent: AgentService,
     private readonly agentSteps: AgentStepService,
     private readonly leases: TaskLeaseService,
+    private readonly conversationContext: ConversationContextService,
   ) {
     super();
   }
@@ -28,6 +30,7 @@ export class AiTaskProcessor extends WorkerHost {
 
     const lease = await this.leases.acquire(job.data.taskId);
     if (!lease) return;
+
     const abortController = new AbortController();
     const heartbeat = setInterval(() => {
       void this.leases
@@ -40,16 +43,18 @@ export class AiTaskProcessor extends WorkerHost {
     heartbeat.unref();
 
     try {
-      // Agent 使用的身份必须来自数据库中的任务 owner，而不是队列载荷。
       const task = await this.prisma.aiTask.findFirstOrThrow({
         where: { id: job.data.taskId, leaseToken: lease.token },
         select: {
-          prompt: true,
           owner: {
             select: { id: true, username: true, email: true, role: true },
           },
         },
       });
+      const history = await this.conversationContext.buildForTask(
+        job.data.taskId,
+      );
+
       await this.agent.run(
         [
           {
@@ -57,7 +62,7 @@ export class AiTaskProcessor extends WorkerHost {
             content:
               'You are a network device troubleshooting agent. Use tools when required.',
           },
-          { role: 'user', content: task.prompt },
+          ...history,
         ],
         {
           taskId: job.data.taskId,
@@ -70,6 +75,7 @@ export class AiTaskProcessor extends WorkerHost {
       if (error instanceof LeaseLostError || abortController.signal.aborted) {
         return;
       }
+
       const maxAttempts = job.opts.attempts ?? 1;
       const failed = await this.agentSteps.failTask(
         lease,
