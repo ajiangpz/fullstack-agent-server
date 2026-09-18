@@ -8,10 +8,7 @@ import {
 import { Queue } from 'bullmq';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import type { Prisma } from '../generated/prisma/client';
-import {
-  ConversationMessageRole,
-  UserRole,
-} from '../generated/prisma/enums';
+import { ConversationMessageRole, UserRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
 import { CreateAiTaskDto } from './dto/create-ai-task.dto';

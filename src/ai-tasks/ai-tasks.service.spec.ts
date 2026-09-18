@@ -78,10 +78,7 @@ describe('AiTasksService', () => {
     (queue.add as jest.Mock).mockResolvedValue({ id: 'task-1' });
 
     await expect(
-      service.create(
-        { conversationId: 'conv-1', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-1', prompt: 'hello' }, user),
     ).resolves.toEqual({ taskId: 'task-1' });
 
     expect(tx.conversation.updateMany).toHaveBeenCalledWith({
@@ -124,10 +121,7 @@ describe('AiTasksService', () => {
     tx.conversation.findFirst.mockResolvedValue({ id: 'conv-1' });
 
     await expect(
-      service.create(
-        { conversationId: 'conv-1', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-1', prompt: 'hello' }, user),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(tx.aiTask.create).not.toHaveBeenCalled();
@@ -138,10 +132,7 @@ describe('AiTasksService', () => {
     tx.conversation.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.create(
-        { conversationId: 'conv-other', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-other', prompt: 'hello' }, user),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(tx.conversation.findFirst).toHaveBeenCalledWith({
@@ -166,10 +157,7 @@ describe('AiTasksService', () => {
     (queue.add as jest.Mock).mockRejectedValue(new Error('redis unavailable'));
 
     await expect(
-      service.create(
-        { conversationId: 'conv-1', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-1', prompt: 'hello' }, user),
     ).rejects.toThrow(ServiceUnavailableException);
 
     expect(tx.aiTask.update).toHaveBeenCalledWith({
