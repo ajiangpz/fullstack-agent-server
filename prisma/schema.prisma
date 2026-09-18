@@ -56,26 +56,66 @@ enum AgentStepStatus {
   FAILED
 }
 
+enum ConversationMessageRole {
+  USER
+  ASSISTANT
+}
+
+model Conversation {
+  id        String                @id @default(cuid())
+  ownerId   Int
+  owner     User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  busy      Boolean               @default(false)
+  messages  ConversationMessage[]
+  tasks     AiTask[]
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@index([ownerId, updatedAt])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String                  @id @default(cuid())
+  conversationId String
+  conversation   Conversation            @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  taskId         String
+  task           AiTask                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  role           ConversationMessageRole
+  content        String                  @db.Text
+  sequence       Int
+  createdAt      DateTime                @default(now())
+
+  @@unique([conversationId, sequence])
+  @@unique([taskId, role])
+  @@index([conversationId, createdAt])
+  @@map("conversation_messages")
+}
+
 model AiTask {
-  id           String       @id @default(cuid())
-  prompt       String       @db.Text
-  status       AiTaskStatus @default(PENDING)
-  result       String?      @db.Text
-  errorMessage String?      @db.Text
-  attempts     Int          @default(0)
-  retryCount   Int          @default(0)
-  lockedBy     String?      @db.VarChar(255)
-  leaseToken   String?      @unique @db.Uuid
+  id             String       @id @default(cuid())
+  prompt         String       @db.Text
+  status         AiTaskStatus @default(PENDING)
+  result         String?      @db.Text
+  errorMessage   String?      @db.Text
+  attempts       Int          @default(0)
+  retryCount     Int          @default(0)
+  lockedBy       String?      @db.VarChar(255)
+  leaseToken     String?      @unique @db.Uuid
   leaseExpiresAt DateTime?
-  ownerId      Int
-  owner        User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  startedAt    DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  steps        AgentStep[]
+  ownerId        Int
+  owner          User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  steps          AgentStep[]
+  messages       ConversationMessage[]
 
   @@index([ownerId, createdAt])
+  @@index([conversationId, createdAt])
   @@index([status])
   @@index([status, leaseExpiresAt])
   @@map("ai_tasks")
@@ -134,19 +174,20 @@ model Device {
 }
 
 model User {
-  id           Int        @id @default(autoincrement())
-  username     String     @unique @db.VarChar(50)
-  email        String     @unique @db.VarChar(255)
-  passwordHash String     @db.VarChar(255)
-  displayName  String?    @db.VarChar(100)
-  role         UserRole   @default(USER)
-  status       UserStatus @default(ACTIVE)
-  lastLoginAt  DateTime?
-  devices      Device[]
-  auditLogs    AuditLog[]
-  aiTasks      AiTask[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id            Int            @id @default(autoincrement())
+  username      String         @unique @db.VarChar(50)
+  email         String         @unique @db.VarChar(255)
+  passwordHash  String         @db.VarChar(255)
+  displayName   String?        @db.VarChar(100)
+  role          UserRole       @default(USER)
+  status        UserStatus     @default(ACTIVE)
+  lastLoginAt   DateTime?
+  devices       Device[]
+  auditLogs     AuditLog[]
+  aiTasks       AiTask[]
+  conversations Conversation[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([status])
   @@map("users")
