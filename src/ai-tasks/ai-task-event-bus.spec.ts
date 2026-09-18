@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import type { Queue } from 'bullmq';
 import { AiTaskEventBus } from './ai-task-event-bus';
 
@@ -43,9 +43,11 @@ describe('AiTaskEventBus', () => {
   it('publishes task events to a task-scoped Redis channel', async () => {
     const bus = new AiTaskEventBus(queue);
 
-    await expect(
-      bus.publish('task-1', 'step.created', { id: 'step-1' }),
-    ).resolves.toBe(true);
+    const published = await bus.publish('task-1', 'step.created', {
+      id: 'step-1',
+    });
+
+    expect(published).toBe(true);
 
     expect(publish).toHaveBeenCalledTimes(1);
     const [channel, payload] = publish.mock.calls[0] as [string, string];

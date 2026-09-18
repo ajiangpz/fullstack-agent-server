@@ -23,10 +23,11 @@ export function reduceAiTaskStreamEvent(
   if (!current || current.id !== event.taskId) return current;
 
   if (event.type === 'step.created' || event.type === 'step.updated') {
-    if (!isAgentStep(event.data)) return current;
+    const step = event.data;
+    if (!isAgentStep(step)) return current;
 
-    const steps = current.steps.filter((step) => step.id !== event.data.id);
-    steps.push(event.data);
+    const steps = current.steps.filter((item) => item.id !== step.id);
+    steps.push(step);
     steps.sort((left, right) => left.sequence - right.sequence);
     return { ...current, steps };
   }
