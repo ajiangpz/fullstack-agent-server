@@ -11,6 +11,11 @@ import {
 
 const CHANNEL_PREFIX = 'ai-task:';
 
+interface RedisCommandClient {
+  publish(channel: string, payload: string): Promise<number>;
+  duplicate(): RedisSubscriber;
+}
+
 interface RedisSubscriber {
   subscribe(channel: string): Promise<number>;
   unsubscribe(channel: string): Promise<number>;
@@ -41,7 +46,7 @@ export class AiTaskEventBus implements OnModuleDestroy {
     data: unknown,
   ): Promise<boolean> {
     try {
-      const client = await this.queue.client;
+      const client = (await this.queue.client) as unknown as RedisCommandClient;
       const event = createAiTaskStreamEvent(taskId, type, data);
       await client.publish(this.channel(taskId), JSON.stringify(event));
       return true;
@@ -143,8 +148,8 @@ export class AiTaskEventBus implements OnModuleDestroy {
   }
 
   private async createSubscriber(): Promise<RedisSubscriber> {
-    const client = await this.queue.client;
-    const subscriber = client.duplicate() as unknown as RedisSubscriber;
+    const client = (await this.queue.client) as unknown as RedisCommandClient;
+    const subscriber = client.duplicate();
 
     subscriber.on('message', (channel, payload) => {
       this.handleMessage(channel, payload);
