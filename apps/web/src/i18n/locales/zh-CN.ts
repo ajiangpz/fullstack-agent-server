@@ -161,6 +161,17 @@ export const zhCN = {
   'device.delete.deleting': '删除中…',
   'device.delete.failure': '无法删除设备。',
 
+  'conversation.new': '新建会话',
+  'conversation.empty': '向 Network Agent 发送第一条消息。',
+  'conversation.user': '你',
+  'conversation.agent': 'Agent',
+  'conversation.loading': '正在加载会话…',
+  'conversation.busy': 'Agent 正在执行，请等待当前任务结束后再发送下一条消息。',
+  'conversation.send': '发送',
+  'conversation.failed': '上一条 Agent 任务执行失败，你可以继续发送消息。',
+  'conversation.restoreError': '无法恢复该会话。',
+  'conversation.createError': '无法创建会话。',
+
   'agent.section': 'AI 运维',
   'agent.title': 'Network Agent',
   'agent.description':

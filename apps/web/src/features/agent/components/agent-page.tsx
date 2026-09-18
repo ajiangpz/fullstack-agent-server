@@ -4,27 +4,33 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   ArrowRight,
   Bot,
-  CheckCircle2,
   Clock3,
   LoaderCircle,
+  MessageSquarePlus,
   Radio,
   Send,
   Sparkles,
   TriangleAlert,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useTranslation } from '@/i18n/use-translation';
 import type { TranslationKey } from '@/i18n/types';
 import { translateValidationMessage } from '@/i18n/validation';
 import { ApiError } from '@/lib/api-client';
+import {
+  useConversation,
+  useCreateConversation,
+} from '../conversation-hooks';
+import { useActiveConversationStore } from '../conversation-store';
 import { useAiTaskRealtime, useCreateAiTask } from '../hooks';
-import { parseAiTaskResult } from '../result';
 import { agentPromptSchema, type AgentPromptInput } from '../schema';
 import type { AiTaskStatus } from '../types';
+import { ConversationMessageList } from './conversation-message-list';
 import { TaskStatusBadge } from './task-status-badge';
 
 const statusCopy: Record<
@@ -57,15 +63,36 @@ const suggestionKeys: TranslationKey[] = [
 ];
 
 export function AgentPage() {
+  const queryClient = useQueryClient();
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const createMutation = useCreateAiTask();
-  const taskQuery = useAiTaskRealtime(taskId);
+  const activeConversationId = useActiveConversationStore(
+    (state) => state.activeConversationId,
+  );
+  const hasHydrated = useActiveConversationStore(
+    (state) => state.hasHydrated,
+  );
+  const hydrateConversation = useActiveConversationStore(
+    (state) => state.hydrate,
+  );
+  const setActiveConversationId = useActiveConversationStore(
+    (state) => state.setActiveConversationId,
+  );
+  const clearActiveConversation = useActiveConversationStore(
+    (state) => state.clearActiveConversation,
+  );
+
+  const createConversationMutation = useCreateConversation();
+  const createTaskMutation = useCreateAiTask();
+  const conversationQuery = useConversation(
+    hasHydrated ? activeConversationId : null,
+  );
+  const taskQuery = useAiTaskRealtime(taskId, activeConversationId);
   const { t } = useTranslation();
   const {
     register,
     handleSubmit,
+    reset,
     setValue,
     formState: { errors },
   } = useForm<AgentPromptInput>({
@@ -73,36 +100,124 @@ export function AgentPage() {
     defaultValues: { prompt: '' },
   });
 
+  useEffect(() => {
+    hydrateConversation();
+  }, [hydrateConversation]);
+
+  useEffect(() => {
+    if (conversationQuery.data?.activeTaskId) {
+      setTaskId(conversationQuery.data.activeTaskId);
+    }
+  }, [conversationQuery.data?.activeTaskId]);
+
   const task = taskQuery.data;
-  const parsedResult = parseAiTaskResult(task?.result ?? null);
+  const conversationBusy =
+    conversationQuery.data?.conversation.busy === true ||
+    task?.status === 'PENDING' ||
+    task?.status === 'PROCESSING';
+  const submitting =
+    createConversationMutation.isPending || createTaskMutation.isPending;
+  const composerDisabled = conversationBusy || submitting;
 
   const onSubmit = handleSubmit(async (values) => {
+    if (composerDisabled) return;
+
     setSubmitError(null);
+    let conversationId = activeConversationId;
+
     try {
-      const created = await createMutation.mutateAsync(values);
-      setSubmittedPrompt(values.prompt);
+      if (!conversationId) {
+        const conversation = await createConversationMutation.mutateAsync();
+        conversationId = conversation.id;
+        setActiveConversationId(conversation.id);
+      }
+
+      const created = await createTaskMutation.mutateAsync({
+        conversationId,
+        prompt: values.prompt,
+      });
       setTaskId(created.taskId);
+      reset({ prompt: '' });
+      await queryClient.invalidateQueries({
+        queryKey: ['conversation', conversationId],
+      });
     } catch (error) {
       setSubmitError(
-        error instanceof ApiError ? error.message : t('agent.createFailure'),
+        error instanceof ApiError
+          ? error.message
+          : conversationId
+            ? t('agent.createFailure')
+            : t('conversation.createError'),
       );
     }
   });
 
+  function startNewConversation() {
+    clearActiveConversation();
+    setTaskId(null);
+    setSubmitError(null);
+    reset({ prompt: '' });
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <p className="text-sm text-cyan-400">{t('agent.section')}</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-          {t('agent.title')}
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-          {t('agent.description')}
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm text-cyan-400">{t('agent.section')}</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            {t('agent.title')}
+          </h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
+            {t('agent.description')}
+          </p>
+        </div>
+        <Button variant="secondary" onClick={startNewConversation}>
+          <MessageSquarePlus className="mr-2 h-4 w-4" />
+          {t('conversation.new')}
+        </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
         <div className="space-y-6">
+          <Card className="min-h-[360px] p-5 sm:p-6">
+            {!hasHydrated ||
+            (activeConversationId && conversationQuery.isLoading) ? (
+              <div className="flex items-center gap-3 py-10 text-sm text-zinc-500">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                {t('conversation.loading')}
+              </div>
+            ) : conversationQuery.isError ? (
+              <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                {t('conversation.restoreError')}
+              </div>
+            ) : (
+              <ConversationMessageList
+                messages={conversationQuery.data?.messages ?? []}
+              />
+            )}
+
+            {conversationBusy ? (
+              <div className="mt-5 flex items-center gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-200">
+                {taskQuery.streamStatus === 'connected' ? (
+                  <Radio className="h-4 w-4" />
+                ) : (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                )}
+                <span>{t('conversation.busy')}</span>
+              </div>
+            ) : null}
+
+            {task?.status === 'FAILED' ? (
+              <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-200">
+                <p className="font-medium">{t('conversation.failed')}</p>
+                {task.errorMessage ? (
+                  <p className="mt-1 text-red-300/80">{task.errorMessage}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </Card>
+
           <Card className="p-5">
             <form
               className="space-y-4"
@@ -115,9 +230,9 @@ export function AgentPage() {
                 {t('agent.ask')}
               </div>
               <textarea
-                className="min-h-36 w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-500"
+                className="min-h-28 w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
                 placeholder={t('agent.placeholder')}
-                disabled={createMutation.isPending}
+                disabled={composerDisabled}
                 {...register('prompt')}
               />
               {errors.prompt ? (
@@ -131,28 +246,17 @@ export function AgentPage() {
                 </div>
               ) : null}
               <div className="flex justify-end">
-                <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? (
+                <Button type="submit" disabled={composerDisabled}>
+                  {submitting ? (
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="mr-2 h-4 w-4" />
                   )}
-                  {t('agent.run')}
+                  {t('conversation.send')}
                 </Button>
               </div>
             </form>
           </Card>
-
-          {submittedPrompt ? (
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                {t('agent.request')}
-              </p>
-              <p className="mt-3 text-sm leading-6 text-zinc-200">
-                {submittedPrompt}
-              </p>
-            </Card>
-          ) : null}
 
           {task ? (
             <Card className="p-5" aria-live="polite">
@@ -161,7 +265,7 @@ export function AgentPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                     {t('agent.task')}
                   </p>
-                  <h2 className="mt-2 text-xl font-semibold text-zinc-100">
+                  <h2 className="mt-2 text-lg font-semibold text-zinc-100">
                     {t(statusCopy[task.status].title)}
                   </h2>
                   <p className="mt-1 text-sm leading-6 text-zinc-500">
@@ -170,69 +274,6 @@ export function AgentPage() {
                 </div>
                 <TaskStatusBadge status={task.status} />
               </div>
-
-              {task.status === 'PENDING' || task.status === 'PROCESSING' ? (
-                <div className="mt-5 flex items-center gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-200">
-                  {taskQuery.streamStatus === 'connected' ? (
-                    <Radio className="h-4 w-4" />
-                  ) : (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  )}
-                  {taskQuery.streamStatus === 'connected'
-                    ? t('agent.live.connected')
-                    : t('agent.live.fallback')}
-                </div>
-              ) : null}
-
-              {task.status === 'FAILED' ? (
-                <div className="mt-5 flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-200">
-                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div>
-                    <p className="font-medium">{t('agent.task.failed')}</p>
-                    <p className="mt-1 text-red-300/80">
-                      {task.errorMessage ?? t('agent.task.noError')}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-
-              {task.status === 'COMPLETED' && parsedResult ? (
-                <div className="mt-5 space-y-5">
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-emerald-300">
-                      <CheckCircle2 className="h-4 w-4" />
-                      {t('agent.finalAnswer')}
-                    </div>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-200">
-                      {parsedResult.answer}
-                    </p>
-                  </div>
-                  {parsedResult.keyPoints.length > 0 ? (
-                    <div>
-                      <p className="text-sm font-medium text-zinc-300">
-                        {t('agent.keyPoints')}
-                      </p>
-                      <ul className="mt-3 space-y-2">
-                        {parsedResult.keyPoints.map((point, index) => (
-                          <li
-                            key={`${index}-${point}`}
-                            className="flex gap-3 text-sm leading-6 text-zinc-400"
-                          >
-                            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400" />
-                            {point}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {task.status === 'COMPLETED' && !parsedResult ? (
-                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
-                  {t('agent.result.invalid')}
-                </div>
-              ) : null}
 
               <div className="mt-5 grid gap-3 border-t border-zinc-800 pt-5 text-xs text-zinc-500 sm:grid-cols-3">
                 <Metric label={t('agent.metric.taskId')} value={task.id} mono />
@@ -255,14 +296,6 @@ export function AgentPage() {
               </Link>
             </Card>
           ) : null}
-
-          {taskQuery.isError ? (
-            <Card className="border-red-500/20 p-5 text-sm text-red-300">
-              {taskQuery.error instanceof Error
-                ? taskQuery.error.message
-                : t('agent.loadError')}
-            </Card>
-          ) : null}
         </div>
 
         <div className="space-y-4">
@@ -278,7 +311,8 @@ export function AgentPage() {
                   <button
                     key={key}
                     type="button"
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-left text-sm leading-5 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200"
+                    disabled={composerDisabled}
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-left text-sm leading-5 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() =>
                       setValue('prompt', prompt, { shouldValidate: true })
                     }
