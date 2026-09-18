@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/i18n/use-translation';
+import { translateValidationMessage } from '@/i18n/validation';
 import { ApiError } from '@/lib/api-client';
 import { registerUser } from './api';
 import { registerSchema, type RegisterInput } from './schema';
@@ -13,6 +15,7 @@ import { registerSchema, type RegisterInput } from './schema';
 export function RegisterForm() {
   const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const { t } = useTranslation();
   const {
     register,
     handleSubmit,
@@ -37,9 +40,7 @@ export function RegisterForm() {
       router.replace('/login');
     } catch (error) {
       setSubmitError(
-        error instanceof ApiError
-          ? error.message
-          : 'Unable to create account. Try again.',
+        error instanceof ApiError ? error.message : t('auth.register.failure'),
       );
     }
   });
@@ -53,7 +54,7 @@ export function RegisterForm() {
     >
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-200" htmlFor="username">
-          Username
+          {t('auth.register.username')}
         </label>
         <Input
           id="username"
@@ -63,13 +64,21 @@ export function RegisterForm() {
           {...register('username')}
         />
         {errors.username ? (
-          <p className="text-sm text-red-400">{errors.username.message}</p>
+          <p className="text-sm text-red-400">
+            {translateValidationMessage(errors.username.message, t)}
+          </p>
         ) : null}
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium text-zinc-200" htmlFor="displayName">
-          Display name <span className="font-normal text-zinc-600">(optional)</span>
+        <label
+          className="text-sm font-medium text-zinc-200"
+          htmlFor="displayName"
+        >
+          {t('auth.register.displayName')}{' '}
+          <span className="font-normal text-zinc-600">
+            {t('auth.register.optional')}
+          </span>
         </label>
         <Input
           id="displayName"
@@ -79,13 +88,15 @@ export function RegisterForm() {
           {...register('displayName')}
         />
         {errors.displayName ? (
-          <p className="text-sm text-red-400">{errors.displayName.message}</p>
+          <p className="text-sm text-red-400">
+            {translateValidationMessage(errors.displayName.message, t)}
+          </p>
         ) : null}
       </div>
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-200" htmlFor="email">
-          Email
+          {t('auth.register.email')}
         </label>
         <Input
           id="email"
@@ -96,13 +107,15 @@ export function RegisterForm() {
           {...register('email')}
         />
         {errors.email ? (
-          <p className="text-sm text-red-400">{errors.email.message}</p>
+          <p className="text-sm text-red-400">
+            {translateValidationMessage(errors.email.message, t)}
+          </p>
         ) : null}
       </div>
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-200" htmlFor="password">
-          Password
+          {t('auth.register.password')}
         </label>
         <Input
           id="password"
@@ -111,9 +124,13 @@ export function RegisterForm() {
           aria-invalid={Boolean(errors.password)}
           {...register('password')}
         />
-        <p className="text-xs text-zinc-600">Use 8 to 128 characters.</p>
+        <p className="text-xs text-zinc-600">
+          {t('auth.register.passwordHint')}
+        </p>
         {errors.password ? (
-          <p className="text-sm text-red-400">{errors.password.message}</p>
+          <p className="text-sm text-red-400">
+            {translateValidationMessage(errors.password.message, t)}
+          </p>
         ) : null}
       </div>
 
@@ -124,7 +141,9 @@ export function RegisterForm() {
       ) : null}
 
       <Button className="w-full" disabled={isSubmitting} type="submit">
-        {isSubmitting ? 'Creating account…' : 'Create account'}
+        {isSubmitting
+          ? t('auth.register.submitting')
+          : t('auth.register.submit')}
       </Button>
     </form>
   );

@@ -3,6 +3,7 @@
 import { ArrowLeft, LoaderCircle, Radio, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
+import { useTranslation } from '@/i18n/use-translation';
 import { useAiTaskRealtime } from '../hooks';
 import { ExecutionTrace } from './execution-trace';
 import { TaskStatusBadge } from './task-status-badge';
@@ -10,13 +11,14 @@ import { TaskStatusBadge } from './task-status-badge';
 export function TaskDetailPage({ taskId }: { taskId: string }) {
   const taskQuery = useAiTaskRealtime(taskId);
   const task = taskQuery.data;
+  const { t } = useTranslation();
 
   if (taskQuery.isLoading) {
     return (
       <Card className="mx-auto max-w-6xl p-8 text-sm text-zinc-400">
         <div className="flex items-center gap-3">
           <LoaderCircle className="h-4 w-4 animate-spin text-cyan-400" />
-          Loading Agent task…
+          {t('task.detail.loading')}
         </div>
       </Card>
     );
@@ -30,7 +32,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           <span>
             {taskQuery.error instanceof Error
               ? taskQuery.error.message
-              : 'Unable to load Agent task.'}
+              : t('task.detail.loadError')}
           </span>
         </div>
       </Card>
@@ -46,13 +48,15 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         href="/agent"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Agent
+        {t('task.detail.back')}
       </Link>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm text-cyan-400">Agent Execution Trace</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Task detail</h1>
+          <p className="text-sm text-cyan-400">{t('task.detail.section')}</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            {t('task.detail.title')}
+          </h1>
           <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-zinc-400">
             {task.prompt}
           </p>
@@ -61,10 +65,13 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Steps" value={String(task.steps.length)} />
-        <Metric label="Attempts" value={String(task.attempts)} />
-        <Metric label="Retries" value={String(task.retryCount)} />
-        <Metric label="Duration" value={taskDuration(task.startedAt, task.completedAt)} />
+        <Metric label={t('task.detail.steps')} value={String(task.steps.length)} />
+        <Metric label={t('task.detail.attempts')} value={String(task.attempts)} />
+        <Metric label={t('task.detail.retries')} value={String(task.retryCount)} />
+        <Metric
+          label={t('task.detail.duration')}
+          value={taskDuration(task.startedAt, task.completedAt, t)}
+        />
       </div>
 
       {active ? (
@@ -76,8 +83,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
               <LoaderCircle className="h-4 w-4 animate-spin" />
             )}
             {taskQuery.streamStatus === 'connected'
-              ? 'Live execution events connected.'
-              : 'Realtime stream unavailable or reconnecting. Polling fallback remains active.'}
+              ? t('agent.live.connected')
+              : t('agent.live.fallback')}
           </div>
         </Card>
       ) : null}
@@ -90,15 +97,19 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
       <Card className="p-5 sm:p-6">
         <div className="mb-5">
-          <h2 className="text-lg font-semibold text-zinc-100">Execution trace</h2>
+          <h2 className="text-lg font-semibold text-zinc-100">
+            {t('task.detail.traceTitle')}
+          </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Persisted runtime facts only. This view does not expose private model reasoning.
+            {t('task.detail.traceDescription')}
           </p>
         </div>
         <ExecutionTrace steps={task.steps} />
       </Card>
 
-      <p className="break-all font-mono text-[11px] text-zinc-700">Task ID: {task.id}</p>
+      <p className="break-all font-mono text-[11px] text-zinc-700">
+        {t('task.detail.taskId', { id: task.id })}
+      </p>
     </div>
   );
 }
@@ -112,9 +123,13 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function taskDuration(startedAt: string | null, completedAt: string | null) {
-  if (!startedAt) return 'Not started';
-  if (!completedAt) return 'Running';
+function taskDuration(
+  startedAt: string | null,
+  completedAt: string | null,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  if (!startedAt) return t('common.notStarted');
+  if (!completedAt) return t('common.status.running');
   const duration = Date.parse(completedAt) - Date.parse(startedAt);
   if (!Number.isFinite(duration) || duration < 0) return '—';
   if (duration < 1_000) return `${duration} ms`;

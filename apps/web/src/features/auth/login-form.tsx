@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/i18n/use-translation';
+import { translateValidationMessage } from '@/i18n/validation';
 import { ApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/auth-store';
 import { login } from './api';
@@ -15,6 +17,7 @@ export function LoginForm() {
   const router = useRouter();
   const setSession = useAuthStore((state) => state.setSession);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const { t } = useTranslation();
   const {
     register,
     handleSubmit,
@@ -32,7 +35,7 @@ export function LoginForm() {
       router.replace('/dashboard');
     } catch (error) {
       setSubmitError(
-        error instanceof ApiError ? error.message : 'Unable to sign in. Try again.',
+        error instanceof ApiError ? error.message : t('auth.login.failure'),
       );
     }
   });
@@ -46,7 +49,7 @@ export function LoginForm() {
     >
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-200" htmlFor="email">
-          Email
+          {t('auth.login.email')}
         </label>
         <Input
           id="email"
@@ -57,13 +60,15 @@ export function LoginForm() {
           {...register('email')}
         />
         {errors.email ? (
-          <p className="text-sm text-red-400">{errors.email.message}</p>
+          <p className="text-sm text-red-400">
+            {translateValidationMessage(errors.email.message, t)}
+          </p>
         ) : null}
       </div>
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-200" htmlFor="password">
-          Password
+          {t('auth.login.password')}
         </label>
         <Input
           id="password"
@@ -73,7 +78,9 @@ export function LoginForm() {
           {...register('password')}
         />
         {errors.password ? (
-          <p className="text-sm text-red-400">{errors.password.message}</p>
+          <p className="text-sm text-red-400">
+            {translateValidationMessage(errors.password.message, t)}
+          </p>
         ) : null}
       </div>
 
@@ -84,7 +91,7 @@ export function LoginForm() {
       ) : null}
 
       <Button className="w-full" disabled={isSubmitting} type="submit">
-        {isSubmitting ? 'Signing in…' : 'Sign in'}
+        {isSubmitting ? t('auth.login.submitting') : t('auth.login.submit')}
       </Button>
     </form>
   );

@@ -1,5 +1,34 @@
+'use client';
+
+import { LanguageSwitcher } from '@/components/language-switcher';
 import { Card } from '@/components/ui/card';
+import { useTranslation } from '@/i18n/use-translation';
 
 export default function SettingsPage() {
-  return <div className="mx-auto max-w-6xl"><p className="text-sm text-cyan-400">Foundation</p><h1 className="mt-1 text-3xl font-semibold">Settings</h1><Card className="mt-6 p-6 text-sm leading-6 text-zinc-400">Application and user preferences will be added only when backed by persisted settings requirements.</Card></div>;
+  const { language, t } = useTranslation();
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <p className="text-sm text-cyan-400">{t('settings.section')}</p>
+      <h1 className="mt-1 text-3xl font-semibold">{t('settings.title')}</h1>
+      <p className="mt-2 text-sm text-zinc-500">{t('settings.description')}</p>
+
+      <Card className="mt-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-medium text-zinc-100">
+            {t('settings.language.title')}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
+            {t('settings.language.description')}
+          </p>
+          <p className="mt-2 text-xs text-zinc-600">
+            {language === 'zh-CN'
+              ? t('language.chinese')
+              : t('language.english')}
+          </p>
+        </div>
+        <LanguageSwitcher />
+      </Card>
+    </div>
+  );
 }

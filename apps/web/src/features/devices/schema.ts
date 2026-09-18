@@ -13,8 +13,8 @@ function isIpv4(value: string) {
 }
 
 export const deviceSchema = z.object({
-  name: z.string().trim().min(1, 'Device name is required').max(100),
-  ip: z.string().trim().refine(isIpv4, 'Enter a valid IPv4 address'),
+  name: z.string().trim().min(1, 'validation.device.nameRequired').max(100),
+  ip: z.string().trim().refine(isIpv4, 'validation.device.ip'),
   portCount: z.number().int().min(1).max(128),
   status: z.enum(['online', 'offline']),
 });

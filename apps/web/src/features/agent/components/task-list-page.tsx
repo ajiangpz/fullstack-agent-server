@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/i18n/use-translation';
 import { useAuthStore } from '@/lib/auth-store';
 import { useAiTasks } from '../hooks';
 import type {
@@ -28,6 +29,7 @@ export function TaskListPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<AiTaskStatus | ''>('');
   const tasksQuery = useAiTasks(query);
+  const { t, intlLocale } = useTranslation();
   const data = tasksQuery.data;
   const tasks = data?.items ?? [];
 
@@ -49,10 +51,12 @@ export function TaskListPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <p className="text-sm text-cyan-400">Agent Operations</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Tasks</h1>
+        <p className="text-sm text-cyan-400">{t('tasks.section')}</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+          {t('tasks.title')}
+        </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-          Review Agent task history, execution status, retries and persisted traces.
+          {t('tasks.description')}
         </p>
       </div>
 
@@ -62,45 +66,55 @@ export function TaskListPage() {
             <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-zinc-600" />
             <Input
               className="pl-9"
-              placeholder="Search task prompts"
+              placeholder={t('tasks.search')}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
+              onKeyDown={(event) =>
+                event.key === 'Enter' && applyFilters()
+              }
             />
           </div>
 
           <select
             className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-300 outline-none focus:border-cyan-500"
             value={status}
-            onChange={(event) => setStatus(event.target.value as AiTaskStatus | '')}
+            onChange={(event) =>
+              setStatus(event.target.value as AiTaskStatus | '')
+            }
           >
-            <option value="">All statuses</option>
-            <option value="PENDING">Pending</option>
-            <option value="PROCESSING">Processing</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="FAILED">Failed</option>
+            <option value="">{t('tasks.allStatuses')}</option>
+            <option value="PENDING">{t('common.status.pending')}</option>
+            <option value="PROCESSING">
+              {t('common.status.processing')}
+            </option>
+            <option value="COMPLETED">{t('common.status.completed')}</option>
+            <option value="FAILED">{t('common.status.failed')}</option>
           </select>
 
           <div className="flex gap-2">
             <Button variant="secondary" onClick={resetFilters}>
-              Reset
+              {t('common.reset')}
             </Button>
-            <Button onClick={applyFilters}>Apply</Button>
+            <Button onClick={applyFilters}>{t('common.apply')}</Button>
           </div>
         </div>
       </Card>
 
       <Card className="overflow-hidden">
-        {tasksQuery.isLoading ? <StateMessage>Loading Agent tasks…</StateMessage> : null}
+        {tasksQuery.isLoading ? (
+          <StateMessage>{t('tasks.loading')}</StateMessage>
+        ) : null}
         {tasksQuery.isError ? (
           <StateMessage tone="error">
             {tasksQuery.error instanceof Error
               ? tasksQuery.error.message
-              : 'Unable to load Agent tasks.'}
+              : t('tasks.loadError')}
           </StateMessage>
         ) : null}
-        {!tasksQuery.isLoading && !tasksQuery.isError && tasks.length === 0 ? (
-          <StateMessage>No Agent tasks match the current filters.</StateMessage>
+        {!tasksQuery.isLoading &&
+        !tasksQuery.isError &&
+        tasks.length === 0 ? (
+          <StateMessage>{t('tasks.empty')}</StateMessage>
         ) : null}
 
         {tasks.length > 0 ? (
@@ -108,15 +122,29 @@ export function TaskListPage() {
             <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="border-b border-zinc-800 bg-zinc-900/60 text-xs uppercase tracking-wide text-zinc-500">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Prompt</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Steps</th>
-                  <th className="px-5 py-3 font-medium">Retries</th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('tasks.table.prompt')}
+                  </th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('tasks.table.status')}
+                  </th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('tasks.table.steps')}
+                  </th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('tasks.table.retries')}
+                  </th>
                   {user?.role === 'ADMIN' ? (
-                    <th className="px-5 py-3 font-medium">Owner</th>
+                    <th className="px-5 py-3 font-medium">
+                      {t('tasks.table.owner')}
+                    </th>
                   ) : null}
-                  <th className="px-5 py-3 font-medium">Created</th>
-                  <th className="px-5 py-3 text-right font-medium">Trace</th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('tasks.table.created')}
+                  </th>
+                  <th className="px-5 py-3 text-right font-medium">
+                    {t('tasks.table.trace')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-900">
@@ -125,6 +153,7 @@ export function TaskListPage() {
                     key={task.id}
                     task={task}
                     showOwner={user?.role === 'ADMIN'}
+                    locale={intlLocale}
                   />
                 ))}
               </tbody>
@@ -134,21 +163,27 @@ export function TaskListPage() {
 
         {data ? (
           <div className="flex flex-col gap-3 border-t border-zinc-800 px-5 py-4 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              {data.pagination.total} task{data.pagination.total === 1 ? '' : 's'}
-            </span>
+            <span>{t('tasks.count', { count: data.pagination.total })}</span>
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant="secondary"
                 disabled={query.page <= 1}
-                onClick={() => setQuery((current) => ({ ...current, page: current.page - 1 }))}
-                aria-label="Previous task page"
+                onClick={() =>
+                  setQuery((current) => ({
+                    ...current,
+                    page: current.page - 1,
+                  }))
+                }
+                aria-label={t('tasks.previousAria')}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="min-w-24 text-center">
-                Page {data.pagination.page} of {Math.max(data.pagination.totalPages, 1)}
+                {t('common.pageOf', {
+                  page: data.pagination.page,
+                  total: Math.max(data.pagination.totalPages, 1),
+                })}
               </span>
               <Button
                 size="sm"
@@ -157,8 +192,13 @@ export function TaskListPage() {
                   data.pagination.totalPages === 0 ||
                   query.page >= data.pagination.totalPages
                 }
-                onClick={() => setQuery((current) => ({ ...current, page: current.page + 1 }))}
-                aria-label="Next task page"
+                onClick={() =>
+                  setQuery((current) => ({
+                    ...current,
+                    page: current.page + 1,
+                  }))
+                }
+                aria-label={t('tasks.nextAria')}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -173,10 +213,14 @@ export function TaskListPage() {
 function TaskRow({
   task,
   showOwner,
+  locale,
 }: {
   task: AiTaskListItem;
   showOwner: boolean;
+  locale: string;
 }) {
+  const { t } = useTranslation();
+
   return (
     <tr className="hover:bg-zinc-900/40">
       <td className="max-w-xl px-5 py-4">
@@ -188,7 +232,10 @@ function TaskRow({
           {task.prompt}
         </Link>
         {task.status === 'FAILED' && task.errorMessage ? (
-          <p className="mt-1 truncate text-xs text-red-400/80" title={task.errorMessage}>
+          <p
+            className="mt-1 truncate text-xs text-red-400/80"
+            title={task.errorMessage}
+          >
             {task.errorMessage}
           </p>
         ) : null}
@@ -199,15 +246,19 @@ function TaskRow({
       <td className="px-5 py-4 text-zinc-400">{task.stepCount}</td>
       <td className="px-5 py-4 text-zinc-400">{task.retryCount}</td>
       {showOwner ? (
-        <td className="px-5 py-4 font-mono text-xs text-zinc-500">{task.ownerId}</td>
+        <td className="px-5 py-4 font-mono text-xs text-zinc-500">
+          {task.ownerId}
+        </td>
       ) : null}
-      <td className="px-5 py-4 text-zinc-500">{formatDate(task.createdAt)}</td>
+      <td className="px-5 py-4 text-zinc-500">
+        {formatDate(task.createdAt, locale)}
+      </td>
       <td className="px-5 py-4 text-right">
         <Link
           href={`/tasks/${encodeURIComponent(task.id)}`}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-300 hover:text-cyan-200"
         >
-          Open
+          {t('common.open')}
           <ExternalLink className="h-3.5 w-3.5" />
         </Link>
       </td>
@@ -233,11 +284,11 @@ function StateMessage({
   );
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, locale: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : new Intl.DateTimeFormat(undefined, {
+    : new Intl.DateTimeFormat(locale, {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(date);

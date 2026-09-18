@@ -1,7 +1,12 @@
+'use client';
+
+import { useTranslation } from '@/i18n/use-translation';
 import type { DeviceStatus } from '../types';
 
 export function DeviceStatusBadge({ status }: { status: DeviceStatus }) {
   const online = status === 'online';
+  const { t } = useTranslation();
+
   return (
     <span
       className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium ${
@@ -15,7 +20,7 @@ export function DeviceStatusBadge({ status }: { status: DeviceStatus }) {
           online ? 'bg-emerald-400' : 'bg-red-400'
         }`}
       />
-      {online ? 'Online' : 'Offline'}
+      {online ? t('common.status.online') : t('common.status.offline')}
     </span>
   );
 }

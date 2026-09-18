@@ -7,9 +7,11 @@ export const metadata: Metadata = {
   description: 'AI-driven network device management and operations console',
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
         <Providers>{children}</Providers>
       </body>

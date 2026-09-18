@@ -1,3 +1,5 @@
+'use client';
+
 import {
   BrainCircuit,
   CheckCircle2,
@@ -5,21 +7,22 @@ import {
   Database,
   Wrench,
 } from 'lucide-react';
+import { useTranslation } from '@/i18n/use-translation';
+import type { TranslationKey } from '@/i18n/types';
 import { parseAiTaskResult } from '../result';
 import {
   asRecord,
-  formatDuration,
   getStepDurationMs,
   getToolCallMetadata,
   parseStepPayload,
 } from '../trace';
 import type { AgentStep, AgentStepStatus, AgentStepType } from '../types';
 
-const stepTitle: Record<AgentStepType, string> = {
-  MODEL_CALL: 'Model call',
-  TOOL_CALL: 'Tool call',
-  TOOL_RESULT: 'Tool result',
-  FINAL_ANSWER: 'Final answer',
+const stepTitle: Record<AgentStepType, TranslationKey> = {
+  MODEL_CALL: 'trace.step.modelCall',
+  TOOL_CALL: 'trace.step.toolCall',
+  TOOL_RESULT: 'trace.step.toolResult',
+  FINAL_ANSWER: 'trace.step.finalAnswer',
 };
 
 const statusClass: Record<AgentStepStatus, string> = {
@@ -28,13 +31,20 @@ const statusClass: Record<AgentStepStatus, string> = {
   FAILED: 'border-red-500/30 bg-red-500/10 text-red-300',
 };
 
+const statusKey: Record<AgentStepStatus, TranslationKey> = {
+  RUNNING: 'common.status.running',
+  COMPLETED: 'common.status.completed',
+  FAILED: 'common.status.failed',
+};
+
 export function ExecutionTrace({ steps }: { steps: AgentStep[] }) {
   const orderedSteps = [...steps].sort((a, b) => a.sequence - b.sequence);
+  const { t, intlLocale } = useTranslation();
 
   if (orderedSteps.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-zinc-800 px-5 py-10 text-center text-sm text-zinc-500">
-        No execution steps have been persisted yet.
+        {t('trace.empty')}
       </div>
     );
   }
@@ -60,18 +70,18 @@ export function ExecutionTrace({ steps }: { steps: AgentStep[] }) {
                     #{step.sequence}
                   </span>
                   <h3 className="text-sm font-medium text-zinc-100">
-                    {stepTitle[step.type]}
+                    {t(stepTitle[step.type])}
                   </h3>
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">
-                  {formatDuration(getStepDurationMs(step))} ·{' '}
-                  {formatTimestamp(step.startedAt)}
+                  {formatDuration(getStepDurationMs(step), t)} ·{' '}
+                  {formatTimestamp(step.startedAt, intlLocale)}
                 </p>
               </div>
               <span
                 className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusClass[step.status]}`}
               >
-                {step.status}
+                {t(statusKey[step.status])}
               </span>
             </summary>
             <div className="border-t border-zinc-800 px-4 py-4">
@@ -91,16 +101,27 @@ export function ExecutionTrace({ steps }: { steps: AgentStep[] }) {
 }
 
 function StepDetails({ step }: { step: AgentStep }) {
+  const { t } = useTranslation();
+
   if (step.type === 'MODEL_CALL') {
     const output = asRecord(parseStepPayload(step.output));
     return (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Meta label="Model" value={stringValue(output?.model)} />
-          <Meta label="Input tokens" value={numberValue(output?.inputTokens)} />
-          <Meta label="Output tokens" value={numberValue(output?.outputTokens)} />
+          <Meta label={t('trace.model')} value={stringValue(output?.model)} />
+          <Meta
+            label={t('trace.inputTokens')}
+            value={numberValue(output?.inputTokens)}
+          />
+          <Meta
+            label={t('trace.outputTokens')}
+            value={numberValue(output?.outputTokens)}
+          />
         </div>
-        <JsonBlock label="Model metadata" value={output ?? parseStepPayload(step.output)} />
+        <JsonBlock
+          label={t('trace.modelMetadata')}
+          value={output ?? parseStepPayload(step.output)}
+        />
       </div>
     );
   }
@@ -110,10 +131,14 @@ function StepDetails({ step }: { step: AgentStep }) {
     return (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Meta label="Tool" value={metadata.name} mono />
-          <Meta label="Tool call ID" value={metadata.toolCallId ?? '—'} mono />
+          <Meta label={t('trace.tool')} value={metadata.name} mono />
+          <Meta
+            label={t('trace.toolCallId')}
+            value={metadata.toolCallId ?? '—'}
+            mono
+          />
         </div>
-        <JsonBlock label="Arguments" value={metadata.arguments} />
+        <JsonBlock label={t('trace.arguments')} value={metadata.arguments} />
       </div>
     );
   }
@@ -122,7 +147,7 @@ function StepDetails({ step }: { step: AgentStep }) {
     const output = asRecord(parseStepPayload(step.output));
     return (
       <JsonBlock
-        label="Result"
+        label={t('trace.result')}
         value={output && 'result' in output ? output.result : output}
       />
     );
@@ -149,7 +174,7 @@ function StepDetails({ step }: { step: AgentStep }) {
     );
   }
 
-  return <JsonBlock label="Output" value={parseStepPayload(step.output)} />;
+  return <JsonBlock label={t('trace.output')} value={parseStepPayload(step.output)} />;
 }
 
 function StepIcon({ type }: { type: AgentStepType }) {
@@ -172,7 +197,12 @@ function Meta({
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2.5">
       <p className="text-[11px] uppercase tracking-wide text-zinc-600">{label}</p>
-      <p className={`mt-1 truncate text-sm text-zinc-300 ${mono ? 'font-mono text-xs' : ''}`} title={value}>
+      <p
+        className={`mt-1 truncate text-sm text-zinc-300 ${
+          mono ? 'font-mono text-xs' : ''
+        }`}
+        title={value}
+      >
         {value}
       </p>
     </div>
@@ -181,9 +211,8 @@ function Meta({
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
   const content =
-    typeof value === 'string'
-      ? value
-      : JSON.stringify(value ?? null, null, 2);
+    typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2);
+
   return (
     <div>
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-600">
@@ -204,11 +233,20 @@ function numberValue(value: unknown) {
   return typeof value === 'number' ? String(value) : '—';
 }
 
-function formatTimestamp(value: string) {
+function formatDuration(
+  durationMs: number | null,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  if (durationMs === null) return t('common.status.running');
+  if (durationMs < 1_000) return `${durationMs} ms`;
+  return `${(durationMs / 1_000).toFixed(2)} s`;
+}
+
+function formatTimestamp(value: string, locale: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : new Intl.DateTimeFormat(undefined, {
+    : new Intl.DateTimeFormat(locale, {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',

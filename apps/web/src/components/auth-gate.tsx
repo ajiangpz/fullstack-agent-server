@@ -2,12 +2,14 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { useTranslation } from '@/i18n/use-translation';
 import { useAuthStore } from '@/lib/auth-store';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const accessToken = useAuthStore((state) => state.accessToken);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (hasHydrated && !accessToken) {
@@ -18,7 +20,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!hasHydrated || !accessToken) {
     return (
       <main className="grid min-h-screen place-items-center bg-zinc-950 text-sm text-zinc-500">
-        Loading Network Agent…
+        {t('auth.gate.loading')}
       </main>
     );
   }

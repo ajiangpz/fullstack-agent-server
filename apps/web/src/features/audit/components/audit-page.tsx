@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/i18n/use-translation';
+import type { TranslationKey } from '@/i18n/types';
 import { useAuthStore } from '@/lib/auth-store';
 import { useAuditLogs } from '../hooks';
 import {
@@ -16,6 +18,14 @@ import {
 
 const INITIAL_QUERY: AuditQuery = { page: 1, limit: 20 };
 
+const actionKeys: Record<AuditAction, TranslationKey> = {
+  USER_REGISTERED: 'audit.action.USER_REGISTERED',
+  USER_LOGGED_IN: 'audit.action.USER_LOGGED_IN',
+  DEVICE_CREATED: 'audit.action.DEVICE_CREATED',
+  DEVICE_UPDATED: 'audit.action.DEVICE_UPDATED',
+  DEVICE_DELETED: 'audit.action.DEVICE_DELETED',
+};
+
 export function AuditPage() {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
@@ -25,19 +35,24 @@ export function AuditPage() {
   const [actorId, setActorId] = useState('');
   const [filterError, setFilterError] = useState<string | null>(null);
   const auditQuery = useAuditLogs(query, isAdmin);
+  const { t, intlLocale } = useTranslation();
 
   if (!isAdmin) {
     return (
       <div className="mx-auto max-w-4xl">
-        <p className="text-sm text-cyan-400">Security</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Audit Logs</h1>
+        <p className="text-sm text-cyan-400">{t('audit.section')}</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+          {t('audit.title')}
+        </h1>
         <Card className="mt-6 border-amber-500/20 bg-amber-500/5 p-6">
           <div className="flex items-start gap-3">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
             <div>
-              <h2 className="font-medium text-amber-200">Administrator access required</h2>
+              <h2 className="font-medium text-amber-200">
+                {t('audit.adminRequired')}
+              </h2>
               <p className="mt-2 text-sm leading-6 text-zinc-500">
-                Audit logs contain account and device-operation history and are only available to administrators.
+                {t('audit.adminDescription')}
               </p>
             </div>
           </div>
@@ -49,7 +64,7 @@ export function AuditPage() {
   function applyFilters() {
     const parsedActorId = parseActorId(actorId);
     if (parsedActorId === null) {
-      setFilterError('Actor ID must be a positive whole number.');
+      setFilterError(t('audit.actorInvalid'));
       return;
     }
 
@@ -77,10 +92,12 @@ export function AuditPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <p className="text-sm text-cyan-400">Security</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Audit Logs</h1>
+        <p className="text-sm text-cyan-400">{t('audit.section')}</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+          {t('audit.title')}
+        </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-          Review authentication events and device changes recorded by the backend audit domain.
+          {t('audit.description')}
         </p>
       </div>
 
@@ -89,12 +106,14 @@ export function AuditPage() {
           <select
             className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-300 outline-none focus:border-cyan-500"
             value={action}
-            onChange={(event) => setAction(event.target.value as AuditAction | '')}
+            onChange={(event) =>
+              setAction(event.target.value as AuditAction | '')
+            }
           >
-            <option value="">All actions</option>
+            <option value="">{t('audit.allActions')}</option>
             {AUDIT_ACTIONS.map((item) => (
               <option key={item} value={item}>
-                {formatAction(item)}
+                {t(actionKeys[item])}
               </option>
             ))}
           </select>
@@ -103,27 +122,31 @@ export function AuditPage() {
             <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-zinc-600" />
             <Input
               className="pl-9"
-              placeholder="Resource type, e.g. device"
+              placeholder={t('audit.resourcePlaceholder')}
               value={resourceType}
               onChange={(event) => setResourceType(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
+              onKeyDown={(event) =>
+                event.key === 'Enter' && applyFilters()
+              }
             />
           </div>
 
           <Input
             type="number"
             min={1}
-            placeholder="Actor ID"
+            placeholder={t('audit.actorPlaceholder')}
             value={actorId}
             onChange={(event) => setActorId(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
+            onKeyDown={(event) =>
+              event.key === 'Enter' && applyFilters()
+            }
           />
 
           <div className="flex gap-2">
             <Button variant="secondary" onClick={resetFilters}>
-              Reset
+              {t('common.reset')}
             </Button>
-            <Button onClick={applyFilters}>Apply</Button>
+            <Button onClick={applyFilters}>{t('common.apply')}</Button>
           </div>
         </div>
         {filterError ? (
@@ -132,16 +155,20 @@ export function AuditPage() {
       </Card>
 
       <Card className="overflow-hidden">
-        {auditQuery.isLoading ? <StateMessage>Loading audit logs…</StateMessage> : null}
+        {auditQuery.isLoading ? (
+          <StateMessage>{t('audit.loading')}</StateMessage>
+        ) : null}
         {auditQuery.isError ? (
           <StateMessage tone="error">
             {auditQuery.error instanceof Error
               ? auditQuery.error.message
-              : 'Unable to load audit logs.'}
+              : t('audit.loadError')}
           </StateMessage>
         ) : null}
-        {!auditQuery.isLoading && !auditQuery.isError && logs.length === 0 ? (
-          <StateMessage>No audit logs match the current filters.</StateMessage>
+        {!auditQuery.isLoading &&
+        !auditQuery.isError &&
+        logs.length === 0 ? (
+          <StateMessage>{t('audit.empty')}</StateMessage>
         ) : null}
 
         {logs.length > 0 ? (
@@ -149,16 +176,30 @@ export function AuditPage() {
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="border-b border-zinc-800 bg-zinc-900/60 text-xs uppercase tracking-wide text-zinc-500">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Action</th>
-                  <th className="px-5 py-3 font-medium">Resource</th>
-                  <th className="px-5 py-3 font-medium">Actor</th>
-                  <th className="px-5 py-3 font-medium">Time</th>
-                  <th className="px-5 py-3 font-medium">Metadata</th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('audit.table.action')}
+                  </th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('audit.table.resource')}
+                  </th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('audit.table.actor')}
+                  </th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('audit.table.time')}
+                  </th>
+                  <th className="px-5 py-3 font-medium">
+                    {t('audit.table.metadata')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-900">
                 {logs.map((log) => (
-                  <AuditRow key={log.id} log={log} />
+                  <AuditRow
+                    key={log.id}
+                    log={log}
+                    locale={intlLocale}
+                  />
                 ))}
               </tbody>
             </table>
@@ -167,21 +208,27 @@ export function AuditPage() {
 
         {data ? (
           <div className="flex flex-col gap-3 border-t border-zinc-800 px-5 py-4 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              {data.pagination.total} log{data.pagination.total === 1 ? '' : 's'}
-            </span>
+            <span>{t('audit.count', { count: data.pagination.total })}</span>
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant="secondary"
                 disabled={query.page <= 1}
-                onClick={() => setQuery((current) => ({ ...current, page: current.page - 1 }))}
-                aria-label="Previous audit page"
+                onClick={() =>
+                  setQuery((current) => ({
+                    ...current,
+                    page: current.page - 1,
+                  }))
+                }
+                aria-label={t('audit.previousAria')}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="min-w-24 text-center">
-                Page {data.pagination.page} of {Math.max(data.pagination.totalPages, 1)}
+                {t('common.pageOf', {
+                  page: data.pagination.page,
+                  total: Math.max(data.pagination.totalPages, 1),
+                })}
               </span>
               <Button
                 size="sm"
@@ -190,8 +237,13 @@ export function AuditPage() {
                   data.pagination.totalPages === 0 ||
                   query.page >= data.pagination.totalPages
                 }
-                onClick={() => setQuery((current) => ({ ...current, page: current.page + 1 }))}
-                aria-label="Next audit page"
+                onClick={() =>
+                  setQuery((current) => ({
+                    ...current,
+                    page: current.page + 1,
+                  }))
+                }
+                aria-label={t('audit.nextAria')}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -203,24 +255,28 @@ export function AuditPage() {
   );
 }
 
-function AuditRow({ log }: { log: AuditLog }) {
+function AuditRow({ log, locale }: { log: AuditLog; locale: string }) {
+  const { t } = useTranslation();
+
   return (
     <tr className="align-top hover:bg-zinc-900/40">
       <td className="px-5 py-4">
         <span className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-medium text-zinc-300">
-          {formatAction(log.action)}
+          {t(actionKeys[log.action])}
         </span>
       </td>
       <td className="px-5 py-4">
         <p className="text-zinc-300">{log.resourceType}</p>
         <p className="mt-1 font-mono text-xs text-zinc-600">
-          {log.resourceId ?? 'No resource ID'}
+          {log.resourceId ?? t('audit.noResourceId')}
         </p>
       </td>
       <td className="px-5 py-4 font-mono text-xs text-zinc-400">
-        {log.actorId ?? 'system'}
+        {log.actorId ?? t('common.system')}
       </td>
-      <td className="px-5 py-4 text-zinc-500">{formatDate(log.createdAt)}</td>
+      <td className="px-5 py-4 text-zinc-500">
+        {formatDate(log.createdAt, locale)}
+      </td>
       <td className="px-5 py-4">
         <MetadataDetails value={log.metadata} />
       </td>
@@ -229,6 +285,8 @@ function AuditRow({ log }: { log: AuditLog }) {
 }
 
 function MetadataDetails({ value }: { value: unknown }) {
+  const { t } = useTranslation();
+
   if (value === null || value === undefined) {
     return <span className="text-xs text-zinc-600">—</span>;
   }
@@ -236,7 +294,7 @@ function MetadataDetails({ value }: { value: unknown }) {
   return (
     <details className="max-w-sm">
       <summary className="cursor-pointer text-xs font-medium text-cyan-300 hover:text-cyan-200">
-        View JSON
+        {t('audit.viewJson')}
       </summary>
       <pre className="mt-2 max-h-52 overflow-auto rounded-lg border border-zinc-800 bg-black/30 p-3 text-xs leading-5 text-zinc-400">
         {JSON.stringify(value, null, 2)}
@@ -270,19 +328,11 @@ function parseActorId(value: string) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function formatAction(action: AuditAction) {
-  return action
-    .toLowerCase()
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function formatDate(value: string) {
+function formatDate(value: string, locale: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : new Intl.DateTimeFormat(undefined, {
+    : new Intl.DateTimeFormat(locale, {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(date);

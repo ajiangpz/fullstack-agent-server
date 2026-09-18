@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n/use-translation';
 import { ApiError } from '@/lib/api-client';
 import { useDeleteDevice } from '../hooks';
 import type { Device } from '../types';
@@ -12,9 +13,14 @@ interface DeleteDeviceModalProps {
   onDeleted?: () => void;
 }
 
-export function DeleteDeviceModal({ device, onClose, onDeleted }: DeleteDeviceModalProps) {
+export function DeleteDeviceModal({
+  device,
+  onClose,
+  onDeleted,
+}: DeleteDeviceModalProps) {
   const mutation = useDeleteDevice();
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   if (!device) return null;
 
@@ -27,25 +33,55 @@ export function DeleteDeviceModal({ device, onClose, onDeleted }: DeleteDeviceMo
       onDeleted?.();
       onClose();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Unable to delete device.');
+      setError(
+        cause instanceof ApiError ? cause.message : t('device.delete.failure'),
+      );
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" role="presentation">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl" role="alertdialog" aria-modal="true" aria-labelledby="delete-device-title">
-        <h2 id="delete-device-title" className="text-xl font-semibold text-zinc-100">Delete device?</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-device-title"
+      >
+        <h2
+          id="delete-device-title"
+          className="text-xl font-semibold text-zinc-100"
+        >
+          {t('device.delete.title')}
+        </h2>
         <p className="mt-3 text-sm leading-6 text-zinc-400">
-          <span className="font-medium text-zinc-200">{device.name}</span> ({device.ip}) will be permanently removed.
+          {t('device.delete.description', {
+            name: device.name,
+            ip: device.ip,
+          })}
         </p>
-        {error ? <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div> : null}
+        {error ? (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </div>
+        ) : null}
         <div className="mt-6 flex justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="button" className="bg-red-500 text-white hover:bg-red-400" disabled={mutation.isPending}
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            type="button"
+            className="bg-red-500 text-white hover:bg-red-400"
+            disabled={mutation.isPending}
             onClick={() => {
               void remove();
-            }}>
-            {mutation.isPending ? 'Deleting…' : 'Delete'}
+            }}
+          >
+            {mutation.isPending
+              ? t('device.delete.deleting')
+              : t('common.delete')}
           </Button>
         </div>
       </div>
