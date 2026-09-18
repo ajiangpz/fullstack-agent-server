@@ -11,6 +11,8 @@ import { AgentStepService } from './agent-step.service';
 import { AgentService } from './agent.service';
 import { createAiProvider } from './providers/ai-provider.factory';
 import { GetDeviceTool } from './tools/get-device.tool';
+import { ListDevicesTool } from './tools/list-devices.tool';
+import { SearchDevicesTool } from './tools/search-devices.tool';
 import { ToolRegistry } from './tool-registry';
 import { TaskLeaseService } from './task-lease.service';
 
@@ -28,6 +30,8 @@ import { TaskLeaseService } from './task-lease.service';
     AgentService,
     AgentStepService,
     GetDeviceTool,
+    ListDevicesTool,
+    SearchDevicesTool,
     ToolRegistry,
     TaskLeaseService,
     { provide: AI_PROVIDER, useFactory: createAiProvider },
