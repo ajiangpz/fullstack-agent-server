@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { AgentStepType } from '../generated/prisma/enums';
+import { AgentStepType, ConversationMessageRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiTaskEventBus } from './ai-task-event-bus';
+import { parseAiTaskResult } from './ai-task-result';
 import { LeaseLostError, type TaskLease } from './task-lease.service';
 
 type Ownership = TaskLease | { taskId: string; leaseToken: string };
@@ -59,6 +60,7 @@ export class AgentStepService {
   }
 
   async completeTask(stepId: string, ownership: Ownership, result: string) {
+    const parsedResult = parseAiTaskResult(result);
     const completedAt = new Date();
     const completed = await this.prisma.$transaction(async (tx) => {
       await this.assertOwnership(tx, ownership);
@@ -82,6 +84,36 @@ export class AgentStepService {
           leaseToken: null,
           leaseExpiresAt: null,
         },
+        select: {
+          id: true,
+          conversationId: true,
+          status: true,
+          result: true,
+          errorMessage: true,
+          attempts: true,
+          retryCount: true,
+          startedAt: true,
+          completedAt: true,
+          updatedAt: true,
+        },
+      });
+      const lastMessage = await tx.conversationMessage.findFirst({
+        where: { conversationId: task.conversationId },
+        orderBy: { sequence: 'desc' },
+        select: { sequence: true },
+      });
+      await tx.conversationMessage.create({
+        data: {
+          conversationId: task.conversationId,
+          taskId: task.id,
+          role: ConversationMessageRole.ASSISTANT,
+          content: parsedResult.answer,
+          sequence: (lastMessage?.sequence ?? 0) + 1,
+        },
+      });
+      await tx.conversation.update({
+        where: { id: task.conversationId },
+        data: { busy: false },
       });
       return { step, task };
     });
@@ -113,28 +145,31 @@ export class AgentStepService {
     errorMessage: string,
     isFinalAttempt: boolean,
   ) {
-    const failed = await this.prisma.aiTask.updateMany({
-      where: {
-        id: lease.taskId,
-        leaseToken: lease.token,
-        status: 'PROCESSING',
-      },
-      data: {
-        status: isFinalAttempt ? 'FAILED' : 'PENDING',
-        errorMessage,
-        retryCount: { increment: 1 },
-        completedAt: isFinalAttempt ? new Date() : null,
-        lockedBy: null,
-        leaseToken: null,
-        leaseExpiresAt: null,
-      },
-    });
+    const task = await this.prisma.$transaction(async (tx) => {
+      const failed = await tx.aiTask.updateMany({
+        where: {
+          id: lease.taskId,
+          leaseToken: lease.token,
+          status: 'PROCESSING',
+        },
+        data: {
+          status: isFinalAttempt ? 'FAILED' : 'PENDING',
+          errorMessage,
+          retryCount: { increment: 1 },
+          completedAt: isFinalAttempt ? new Date() : null,
+          lockedBy: null,
+          leaseToken: null,
+          leaseExpiresAt: null,
+        },
+      });
 
-    if (failed.count === 1) {
-      const task = await this.prisma.aiTask.findUnique({
+      if (failed.count !== 1) return null;
+
+      const updatedTask = await tx.aiTask.findUnique({
         where: { id: lease.taskId },
         select: {
           id: true,
+          conversationId: true,
           status: true,
           result: true,
           errorMessage: true,
@@ -146,16 +181,27 @@ export class AgentStepService {
         },
       });
 
-      if (task) {
-        await this.events.publish(
-          lease.taskId,
-          isFinalAttempt ? 'task.failed' : 'task.updated',
-          task,
-        );
-      }
-    }
+      if (!updatedTask) return null;
 
-    return failed.count === 1;
+      if (isFinalAttempt) {
+        await tx.conversation.update({
+          where: { id: updatedTask.conversationId },
+          data: { busy: false },
+        });
+      }
+
+      return updatedTask;
+    });
+
+    if (!task) return false;
+
+    await this.events.publish(
+      lease.taskId,
+      isFinalAttempt ? 'task.failed' : 'task.updated',
+      task,
+    );
+
+    return true;
   }
 
   private async assertOwnership(

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
-import { AgentStepType } from '../generated/prisma/enums';
+import { AgentStepType, ConversationMessageRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiTaskEventBus } from './ai-task-event-bus';
 import { AgentStepService } from './agent-step.service';
@@ -7,12 +7,27 @@ import { LeaseLostError } from './task-lease.service';
 
 describe('AgentStepService', () => {
   const tx = {
-    agentStep: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-    aiTask: { findFirst: jest.fn(), update: jest.fn() },
+    agentStep: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    aiTask: {
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    conversationMessage: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
+    conversation: {
+      update: jest.fn(),
+    },
   };
   const prisma = {
     $transaction: jest.fn((callback) => callback(tx)),
-    aiTask: { updateMany: jest.fn(), findUnique: jest.fn() },
   };
   const events = { publish: jest.fn().mockResolvedValue(true) };
   const ownership = { taskId: 'task-1', leaseToken: 'token-1' };
@@ -53,27 +68,101 @@ describe('AgentStepService', () => {
     expect(events.publish).not.toHaveBeenCalled();
   });
 
-  it('clears the lease and publishes terminal task state when a task completes', async () => {
+  it('writes the assistant message and releases the conversation on completion', async () => {
     tx.agentStep.update.mockResolvedValue({
       id: 'step-1',
       status: 'COMPLETED',
     });
-    tx.aiTask.update.mockResolvedValue({ id: 'task-1', status: 'COMPLETED' });
-
-    await service.completeTask('step-1', ownership, '{"answer":"ok"}');
-
-    expect(tx.aiTask.update).toHaveBeenCalledWith({
-      where: { id: 'task-1' },
-      data: expect.objectContaining({
-        status: 'COMPLETED',
-        lockedBy: null,
-        leaseToken: null,
-        leaseExpiresAt: null,
-      }),
-    });
-    expect(events.publish).toHaveBeenCalledWith('task-1', 'task.completed', {
+    tx.aiTask.update.mockResolvedValue({
       id: 'task-1',
+      conversationId: 'conv-1',
       status: 'COMPLETED',
+      result: '{"answer":"offline","keyPoints":[]}',
     });
+    tx.conversationMessage.findFirst.mockResolvedValue({ sequence: 1 });
+    tx.conversationMessage.create.mockResolvedValue({});
+    tx.conversation.update.mockResolvedValue({});
+
+    await service.completeTask(
+      'step-1',
+      ownership,
+      '{"answer":"offline","keyPoints":[]}',
+    );
+
+    expect(tx.conversationMessage.create).toHaveBeenCalledWith({
+      data: {
+        conversationId: 'conv-1',
+        taskId: 'task-1',
+        role: ConversationMessageRole.ASSISTANT,
+        content: 'offline',
+        sequence: 2,
+      },
+    });
+    expect(tx.conversation.update).toHaveBeenCalledWith({
+      where: { id: 'conv-1' },
+      data: { busy: false },
+    });
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'task.completed',
+      expect.objectContaining({
+        id: 'task-1',
+        status: 'COMPLETED',
+      }),
+    );
+  });
+
+  it('releases the conversation on final task failure', async () => {
+    tx.aiTask.updateMany.mockResolvedValue({ count: 1 });
+    tx.aiTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      conversationId: 'conv-1',
+      status: 'FAILED',
+      retryCount: 3,
+    });
+    tx.conversation.update.mockResolvedValue({});
+
+    await expect(
+      service.failTask(
+        { taskId: 'task-1', token: 'token-1' },
+        'provider down',
+        true,
+      ),
+    ).resolves.toBe(true);
+
+    expect(tx.conversation.update).toHaveBeenCalledWith({
+      where: { id: 'conv-1' },
+      data: { busy: false },
+    });
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'task.failed',
+      expect.objectContaining({ status: 'FAILED' }),
+    );
+  });
+
+  it('keeps the conversation busy for a retryable failure', async () => {
+    tx.aiTask.updateMany.mockResolvedValue({ count: 1 });
+    tx.aiTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      conversationId: 'conv-1',
+      status: 'PENDING',
+      retryCount: 1,
+    });
+
+    await expect(
+      service.failTask(
+        { taskId: 'task-1', token: 'token-1' },
+        'temporary provider error',
+        false,
+      ),
+    ).resolves.toBe(true);
+
+    expect(tx.conversation.update).not.toHaveBeenCalled();
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'task.updated',
+      expect.objectContaining({ status: 'PENDING' }),
+    );
   });
 });
