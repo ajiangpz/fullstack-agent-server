@@ -110,6 +110,25 @@ export function AgentPage() {
     }
   }, [conversationQuery.data?.activeTaskId]);
 
+  useEffect(() => {
+    if (
+      !activeConversationId ||
+      !(conversationQuery.error instanceof ApiError) ||
+      conversationQuery.error.status !== 404
+    ) {
+      return;
+    }
+
+    clearActiveConversation();
+    setTaskId(null);
+    setSubmitError(t('conversation.restoreError'));
+  }, [
+    activeConversationId,
+    clearActiveConversation,
+    conversationQuery.error,
+    t,
+  ]);
+
   const task = taskQuery.data;
   const conversationBusy =
     conversationQuery.data?.conversation.busy === true ||
