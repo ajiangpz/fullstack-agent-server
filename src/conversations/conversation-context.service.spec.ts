@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ConversationContextService,

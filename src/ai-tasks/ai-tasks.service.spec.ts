@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import {
   ConflictException,
   NotFoundException,
@@ -80,10 +80,7 @@ describe('AiTasksService', () => {
 
   it('claims the conversation, creates task and USER message before enqueueing', async () => {
     await expect(
-      service.create(
-        { conversationId: 'conv-1', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-1', prompt: 'hello' }, user),
     ).resolves.toEqual({ taskId: 'task-1' });
 
     expect(tx.conversation.updateMany).toHaveBeenCalledWith({
@@ -140,10 +137,7 @@ describe('AiTasksService', () => {
     tx.conversation.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      service.create(
-        { conversationId: 'conv-1', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-1', prompt: 'hello' }, user),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(tx.aiTask.create).not.toHaveBeenCalled();
@@ -155,10 +149,7 @@ describe('AiTasksService', () => {
     tx.conversation.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.create(
-        { conversationId: 'conv-1', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-1', prompt: 'hello' }, user),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -166,10 +157,7 @@ describe('AiTasksService', () => {
     (queue.add as jest.Mock).mockRejectedValue(new Error('redis unavailable'));
 
     await expect(
-      service.create(
-        { conversationId: 'conv-1', prompt: 'hello' },
-        user,
-      ),
+      service.create({ conversationId: 'conv-1', prompt: 'hello' }, user),
     ).rejects.toThrow(ServiceUnavailableException);
 
     expect(prisma.aiTask.update).toHaveBeenCalledWith({

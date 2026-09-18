@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { NotFoundException } from '@nestjs/common';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { UserRole } from '../generated/prisma/enums';

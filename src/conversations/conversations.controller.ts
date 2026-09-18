@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
@@ -30,10 +23,7 @@ export class ConversationsController {
 
   @ApiOperation({ summary: '查询 Conversation 消息' })
   @Get(':id/messages')
-  messages(
-    @Param('id') id: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
+  messages(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
     return this.conversations.getMessages(id, request.user);
   }
 }
