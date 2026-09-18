@@ -1,8 +1,10 @@
 import OpenAI from 'openai';
 import type {
   AiGenerateWithToolsOptions,
+  AiMessage,
   AiProvider,
   AiResponse,
+  AiToolCall,
 } from './ai-provider';
 import { AiProviderError } from './ai-provider';
 
@@ -44,6 +46,8 @@ export class DeepSeekProvider implements AiProvider {
     tools,
   }: AiGenerateWithToolsOptions): Promise<AiResponse> {
     try {
+      const hasToolResult = messages.some((message) => message.role === 'tool');
+      const requiresToolCall = tools.length > 0 && !hasToolResult;
       const response = await this.client.chat.completions.create({
         model: this.options.model,
         messages: [
@@ -51,18 +55,19 @@ export class DeepSeekProvider implements AiProvider {
             role: 'system',
             content: [
               this.options.instructions,
-              'Return the final answer as a JSON object with answer and keyPoints fields.',
+              requiresToolCall
+                ? 'Call exactly one available tool before answering the user.'
+                : 'Return the final answer as a JSON object with answer and keyPoints fields.',
             ]
               .filter(Boolean)
               .join('\n'),
           },
-          ...messages.map((message) => ({
-            role: message.role === 'tool' ? ('user' as const) : message.role,
-            content: message.content,
-          })),
+          ...messages.map((message) => this.toDeepSeekMessage(message)),
         ],
         max_tokens: this.options.maxOutputTokens,
-        response_format: { type: 'json_object' },
+        ...(requiresToolCall
+          ? {}
+          : { response_format: { type: 'json_object' as const } }),
         ...(tools.length > 0
           ? {
               tools: tools.map((tool) => ({
@@ -74,7 +79,9 @@ export class DeepSeekProvider implements AiProvider {
                   parameters: tool.parameters,
                 },
               })),
-              tool_choice: 'auto' as const,
+              tool_choice: hasToolResult
+                ? ('auto' as const)
+                : ('required' as const),
             }
           : {}),
       });
@@ -101,6 +108,21 @@ export class DeepSeekProvider implements AiProvider {
         throw new AiProviderError('DeepSeek returned an empty response', true);
       }
 
+      const contentToolCall = this.parseContentToolCall(
+        content,
+        response.id,
+        new Set(tools.map((tool) => tool.name)),
+      );
+      if (contentToolCall) {
+        return { type: 'tool_call', toolCalls: [contentToolCall], ...metadata };
+      }
+      if (requiresToolCall) {
+        throw new AiProviderError(
+          'DeepSeek did not return a required tool call',
+          true,
+        );
+      }
+
       return { type: 'final', content, ...metadata };
     } catch (error) {
       if (error instanceof AiProviderError) {
@@ -119,6 +141,106 @@ export class DeepSeekProvider implements AiProvider {
         true,
         { cause: error },
       );
+    }
+  }
+
+  private parseContentToolCall(
+    value: string,
+    responseId: string | undefined,
+    toolNames: Set<string>,
+  ): AiToolCall | undefined {
+    const parsed = this.parseObject(value);
+    if (typeof parsed?.name === 'string' && 'arguments' in parsed) {
+      return this.createContentToolCall(
+        `${responseId ?? 'deepseek'}-content-tool-call`,
+        parsed.name,
+        parsed.arguments,
+        toolNames,
+      );
+    }
+    const fn = parsed?.function;
+    if (
+      parsed?.type === 'function' &&
+      typeof fn === 'object' &&
+      fn !== null &&
+      'name' in fn &&
+      typeof fn.name === 'string' &&
+      'arguments' in fn
+    ) {
+      return this.createContentToolCall(
+        typeof parsed.id === 'string'
+          ? parsed.id
+          : `${responseId ?? 'deepseek'}-content-tool-call`,
+        fn.name,
+        fn.arguments,
+        toolNames,
+      );
+    }
+    return undefined;
+  }
+
+  private createContentToolCall(
+    id: string,
+    name: string,
+    args: unknown,
+    toolNames: Set<string>,
+  ): AiToolCall | undefined {
+    if (!toolNames.has(name)) return undefined;
+    return {
+      id,
+      name,
+      arguments:
+        typeof args === 'string' ? this.parseToolArguments(args) : args,
+    };
+  }
+
+  private toDeepSeekMessage(
+    message: AiMessage,
+  ): OpenAI.Chat.Completions.ChatCompletionMessageParam {
+    const payload = this.parseObject(message.content);
+    if (
+      message.role === 'assistant' &&
+      typeof payload?.toolCallId === 'string' &&
+      typeof payload.name === 'string' &&
+      'arguments' in payload
+    ) {
+      return {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: payload.toolCallId,
+            type: 'function',
+            function: {
+              name: payload.name,
+              arguments: JSON.stringify(payload.arguments),
+            },
+          },
+        ],
+      };
+    }
+    if (message.role === 'tool' && typeof payload?.toolCallId === 'string') {
+      const { toolCallId, ...result } = payload;
+      return {
+        role: 'tool',
+        tool_call_id: toolCallId,
+        content: JSON.stringify(result),
+      };
+    }
+    return {
+      role: message.role === 'tool' ? 'user' : message.role,
+      content: message.content,
+    };
+  }
+
+  private parseObject(value: string): Record<string, unknown> | undefined {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return typeof parsed === 'object' && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : undefined;
+    } catch {
+      return undefined;
     }
   }
 

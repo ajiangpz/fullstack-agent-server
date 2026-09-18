@@ -84,8 +84,7 @@ describe('DeepSeekProvider', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'deepseek-flash',
-        response_format: { type: 'json_object' },
-        tool_choice: 'auto',
+        tool_choice: 'required',
         tools: [
           expect.objectContaining({
             function: expect.objectContaining({ name: 'get_device' }),
@@ -93,9 +92,75 @@ describe('DeepSeekProvider', () => {
         ],
       }),
     );
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ response_format: expect.anything() }),
+    );
   });
 
-  it('returns a final response when no tool call is present', async () => {
+  it('converts a content-based tool request into a tool call', async () => {
+    create.mockResolvedValue({
+      id: 'completion-1',
+      model: 'deepseek-flash',
+      choices: [
+        {
+          message: {
+            content: '{"name":"get_device","arguments":{"deviceId":1}}',
+          },
+        },
+      ],
+    });
+
+    await expect(provider.generateWithTools(request)).resolves.toEqual({
+      type: 'tool_call',
+      model: 'deepseek-flash',
+      inputTokens: undefined,
+      outputTokens: undefined,
+      toolCalls: [
+        {
+          id: 'completion-1-content-tool-call',
+          name: 'get_device',
+          arguments: { deviceId: 1 },
+        },
+      ],
+    });
+  });
+
+  it('converts a serialized native tool call into a tool call', async () => {
+    create.mockResolvedValue({
+      id: 'completion-2',
+      model: 'deepseek-flash',
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              id: 'call-2',
+              type: 'function',
+              function: {
+                name: 'get_device',
+                arguments: '{"deviceId":2}',
+              },
+            }),
+          },
+        },
+      ],
+    });
+
+    await expect(provider.generateWithTools(request)).resolves.toEqual({
+      type: 'tool_call',
+      model: 'deepseek-flash',
+      inputTokens: undefined,
+      outputTokens: undefined,
+      toolCalls: [
+        {
+          id: 'call-2',
+          name: 'get_device',
+          arguments: { deviceId: 2 },
+        },
+      ],
+    });
+  });
+
+  it('allows a final answer after a tool result is available', async () => {
     create.mockResolvedValue({
       model: 'deepseek-flash',
       choices: [
@@ -107,10 +172,65 @@ describe('DeepSeekProvider', () => {
       ],
     });
 
-    await expect(provider.generateWithTools(request)).resolves.toEqual({
-      type: 'final',
-      model: 'deepseek-flash',
-      content: '{"answer":"device 1","keyPoints":[]}',
+    await provider.generateWithTools({
+      ...request,
+      messages: [
+        ...request.messages,
+        {
+          role: 'assistant',
+          content:
+            '{"toolCallId":"call-1","name":"get_device","arguments":{"deviceId":1}}',
+        },
+        {
+          role: 'tool',
+          content: '{"toolCallId":"call-1","result":{"id":1}}',
+        },
+      ],
     });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool_choice: 'auto',
+        response_format: { type: 'json_object' },
+        messages: expect.arrayContaining([
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'call-1',
+                type: 'function',
+                function: {
+                  name: 'get_device',
+                  arguments: '{"deviceId":1}',
+                },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            tool_call_id: 'call-1',
+            content: '{"result":{"id":1}}',
+          },
+        ]),
+      }),
+    );
+  });
+
+  it('rejects a final response before a required tool call', async () => {
+    create.mockResolvedValue({
+      model: 'deepseek-flash',
+      choices: [
+        {
+          message: {
+            content: '{"answer":"device 1","keyPoints":[]}',
+          },
+        },
+      ],
+    });
+
+    await expect(provider.generateWithTools(request)).rejects.toThrow(
+      'DeepSeek did not return a required tool call',
+    );
   });
 });
