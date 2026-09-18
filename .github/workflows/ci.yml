@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/network_agent_ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint backend
+        run: npm run lint:check
+
+      - name: Test backend
+        run: npm test -- --runInBand
+
+      - name: Build backend
+        run: npm run build
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+
+      - name: Install lint tooling
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix apps/web
+
+      - name: Lint frontend
+        run: npm run lint:web
+
+      - name: Typecheck frontend
+        run: npm run typecheck --prefix apps/web
+
+      - name: Test frontend
+        run: npm test --prefix apps/web
+
+      - name: Build frontend
+        run: npm run build --prefix apps/web
