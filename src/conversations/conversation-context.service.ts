@@ -1,0 +1,96 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import type { ConversationMessageRole } from '../generated/prisma/enums';
+import type { AiMessage } from '../ai-tasks/providers/ai-provider';
+import { PrismaService } from '../prisma/prisma.service';
+
+export const MAX_HISTORY_MESSAGES = 20;
+export const MAX_HISTORY_CHARS = 12_000;
+
+@Injectable()
+export class ConversationContextService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async buildForTask(taskId: string): Promise<AiMessage[]> {
+    const task = await this.prisma.aiTask.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        conversation: {
+          select: {
+            messages: {
+              where: {
+                OR: [
+                  {
+                    task: { status: 'COMPLETED' },
+                    role: { in: ['USER', 'ASSISTANT'] },
+                  },
+                  {
+                    taskId,
+                    role: 'USER',
+                  },
+                ],
+              },
+              orderBy: { sequence: 'asc' },
+              select: {
+                taskId: true,
+                role: true,
+                content: true,
+                sequence: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!task) {
+      throw new NotFoundException(`AI task ${taskId} not found`);
+    }
+
+    const messages = task.conversation.messages;
+    const current = messages.find(
+      (message) => message.taskId === taskId && message.role === 'USER',
+    );
+
+    if (!current) {
+      throw new Error('Current conversation user message not found');
+    }
+
+    const history = messages.filter((message) => message.taskId !== taskId);
+    const selected: typeof history = [];
+    let remainingCount = MAX_HISTORY_MESSAGES - 1;
+    let remainingChars = Math.max(
+      0,
+      MAX_HISTORY_CHARS - current.content.length,
+    );
+
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const message = history[index];
+      if (remainingCount <= 0) break;
+      if (message.content.length > remainingChars) break;
+
+      selected.push(message);
+      remainingCount -= 1;
+      remainingChars -= message.content.length;
+    }
+
+    selected.reverse();
+
+    return [
+      ...selected.map((message) =>
+        this.toAiMessage(message.role, message.content),
+      ),
+      { role: 'user', content: current.content },
+    ];
+  }
+
+  private toAiMessage(
+    role: ConversationMessageRole,
+    content: string,
+  ): AiMessage {
+    return {
+      role: role === 'USER' ? 'user' : 'assistant',
+      content,
+    };
+  }
+}
