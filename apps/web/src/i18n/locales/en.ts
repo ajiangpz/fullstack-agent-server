@@ -168,6 +168,17 @@ export const en = {
   'device.delete.deleting': 'Deleting…',
   'device.delete.failure': 'Unable to delete device.',
 
+  'conversation.new': 'New conversation',
+  'conversation.empty': 'Start a conversation with the Network Agent.',
+  'conversation.user': 'You',
+  'conversation.agent': 'Agent',
+  'conversation.loading': 'Loading conversation…',
+  'conversation.busy': 'Agent is working. Wait for this task to finish before sending another message.',
+  'conversation.send': 'Send',
+  'conversation.failed': 'The previous Agent task failed. You can send another message.',
+  'conversation.restoreError': 'Unable to restore this conversation.',
+  'conversation.createError': 'Unable to create a conversation.',
+
   'agent.section': 'AI Operations',
   'agent.title': 'Network Agent',
   'agent.description':
