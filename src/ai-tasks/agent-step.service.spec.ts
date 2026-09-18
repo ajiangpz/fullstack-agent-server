@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
-import { AgentStepType, ConversationMessageRole } from '../generated/prisma/enums';
+import {
+  AgentStepType,
+  ConversationMessageRole,
+} from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiTaskEventBus } from './ai-task-event-bus';
 import { AgentStepService } from './agent-step.service';

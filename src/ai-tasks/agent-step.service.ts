@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { AgentStepType, ConversationMessageRole } from '../generated/prisma/enums';
+import {
+  AgentStepType,
+  ConversationMessageRole,
+} from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiTaskEventBus } from './ai-task-event-bus';
 import { parseAiTaskResult } from './ai-task-result';
