@@ -30,7 +30,12 @@ export class CreateDeviceDto {
   @IsIP(4)
   ip!: string;
 
-  @ApiProperty({ example: 8, minimum: 1, maximum: 128, description: '端口数量' })
+  @ApiProperty({
+    example: 8,
+    minimum: 1,
+    maximum: 128,
+    description: '端口数量',
+  })
   @IsInt()
   @Min(1)
   @Max(128)

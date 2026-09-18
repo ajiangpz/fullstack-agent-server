@@ -26,7 +26,9 @@ export const searchDevicesSchema = z
   );
 
 @Injectable()
-export class SearchDevicesTool implements AgentTool<typeof searchDevicesSchema> {
+export class SearchDevicesTool
+  implements AgentTool<typeof searchDevicesSchema>
+{
   readonly name = 'search_devices';
 
   readonly description =

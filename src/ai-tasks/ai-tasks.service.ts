@@ -59,10 +59,7 @@ export class AiTasksService {
     return { taskId: task.id };
   }
 
-  async findAll(
-    user: AuthenticatedUser,
-    query = new QueryAiTasksDto(),
-  ) {
+  async findAll(user: AuthenticatedUser, query = new QueryAiTasksDto()) {
     const { page, limit, status } = query;
     const search = query.search?.trim();
     const where: Prisma.AiTaskWhereInput = {

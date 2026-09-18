@@ -39,7 +39,10 @@ export function DeleteDeviceModal({ device, onClose, onDeleted }: DeleteDeviceMo
         {error ? <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div> : null}
         <div className="mt-6 flex justify-end gap-3">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="button" className="bg-red-500 text-white hover:bg-red-400" disabled={mutation.isPending} onClick={remove}>
+          <Button type="button" className="bg-red-500 text-white hover:bg-red-400" disabled={mutation.isPending}
+            onClick={() => {
+              void remove();
+            }}>
             {mutation.isPending ? 'Deleting…' : 'Delete'}
           </Button>
         </div>

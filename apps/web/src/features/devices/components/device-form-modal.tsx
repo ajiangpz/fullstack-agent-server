@@ -86,7 +86,12 @@ export function DeviceFormModal({ open, device, onClose }: DeviceFormModalProps)
           </button>
         </div>
 
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+        <form
+          className="mt-6 space-y-4"
+          onSubmit={(event) => {
+            void onSubmit(event);
+          }}
+        >
           <Field label="Name" error={errors.name?.message}>
             <Input placeholder="SW-Core-01" {...register('name')} />
           </Field>

@@ -145,7 +145,9 @@ describe('AiTasksService', () => {
     );
 
     expect(prisma.aiTask.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { status: undefined, prompt: undefined } }),
+      expect.objectContaining({
+        where: { status: undefined, prompt: undefined },
+      }),
     );
   });
 

@@ -11,7 +11,12 @@ export class QueryAuditLogsDto {
   @Min(1)
   page = 1;
 
-  @ApiPropertyOptional({ example: 20, minimum: 1, maximum: 100, description: '每页条数' })
+  @ApiPropertyOptional({
+    example: 20,
+    minimum: 1,
+    maximum: 100,
+    description: '每页条数',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

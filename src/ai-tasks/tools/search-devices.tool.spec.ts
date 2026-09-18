@@ -1,9 +1,6 @@
 import type { DevicesService } from '../../devices/devices.service';
 import type { AgentContext } from './agent-tool.interface';
-import {
-  SearchDevicesTool,
-  searchDevicesSchema,
-} from './search-devices.tool';
+import { SearchDevicesTool, searchDevicesSchema } from './search-devices.tool';
 
 describe('SearchDevicesTool', () => {
   const user = {

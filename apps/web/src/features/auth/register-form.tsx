@@ -45,7 +45,12 @@ export function RegisterForm() {
   });
 
   return (
-    <form className="space-y-5" onSubmit={onSubmit}>
+    <form
+      className="space-y-5"
+      onSubmit={(event) => {
+        void onSubmit(event);
+      }}
+    >
       <div className="space-y-2">
         <label className="text-sm font-medium text-zinc-200" htmlFor="username">
           Username

@@ -44,7 +44,11 @@ describe('registerSchema', () => {
   });
 
   it('allows display name to be omitted', () => {
-    const { displayName: _displayName, ...withoutDisplayName } = validRegistration;
+    const withoutDisplayName = {
+      username: validRegistration.username,
+      email: validRegistration.email,
+      password: validRegistration.password,
+    };
     expect(registerSchema.safeParse(withoutDisplayName).success).toBe(true);
   });
 });
