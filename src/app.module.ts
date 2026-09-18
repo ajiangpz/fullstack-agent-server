@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { AuthModule } from './auth/auth.module';
-import { DevicesModule } from './devices/devices.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { AuditModule } from './audit/audit.module';
-import { DomainEventsModule } from './events/domain-events.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AiTasksModule } from './ai-tasks/ai-tasks.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { AuditModule } from './audit/audit.module';
+import { AuthModule } from './auth/auth.module';
+import { ConversationsModule } from './conversations/conversations.module';
+import { DevicesModule } from './devices/devices.module';
+import { DomainEventsModule } from './events/domain-events.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AiTasksModule } from './ai-tasks/ai-tasks.module';
     DevicesModule,
     AuthModule,
     AuditModule,
+    ConversationsModule,
     AiTasksModule,
   ],
   controllers: [AppController],
