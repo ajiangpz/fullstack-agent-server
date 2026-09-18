@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { AiTasksService } from './ai-tasks.service';
 import { CreateAiTaskDto } from './dto/create-ai-task.dto';
+import { QueryAiTasksDto } from './dto/query-ai-tasks.dto';
 
 @ApiTags('ai-tasks')
 @ApiBearerAuth()
@@ -28,6 +30,15 @@ export class AiTasksController {
     @Req() request: { user: AuthenticatedUser },
   ) {
     return this.aiTasksService.create(dto, request.user);
+  }
+
+  @ApiOperation({ summary: '查询 AI 任务列表' })
+  @Get()
+  findAll(
+    @Query() query: QueryAiTasksDto,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.aiTasksService.findAll(request.user, query);
   }
 
   @ApiOperation({ summary: '查询 AI 任务详情' })

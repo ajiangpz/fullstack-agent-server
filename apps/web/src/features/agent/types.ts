@@ -37,6 +37,38 @@ export interface AiTask {
   steps: AgentStep[];
 }
 
+export interface AiTaskListItem {
+  id: string;
+  prompt: string;
+  status: AiTaskStatus;
+  errorMessage: string | null;
+  attempts: number;
+  retryCount: number;
+  ownerId: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  stepCount: number;
+}
+
+export interface AiTaskQuery {
+  page: number;
+  limit: number;
+  status?: AiTaskStatus;
+  search?: string;
+}
+
+export interface PaginatedAiTasks {
+  items: AiTaskListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export interface CreateAiTaskResponse {
   taskId: string;
 }

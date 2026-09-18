@@ -6,10 +6,12 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
+import type { Prisma } from '../generated/prisma/client';
 import { UserRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
 import { CreateAiTaskDto } from './dto/create-ai-task.dto';
+import { QueryAiTasksDto } from './dto/query-ai-tasks.dto';
 
 @Injectable()
 export class AiTasksService {
@@ -55,6 +57,63 @@ export class AiTasksService {
     }
 
     return { taskId: task.id };
+  }
+
+  async findAll(
+    user: AuthenticatedUser,
+    query = new QueryAiTasksDto(),
+  ) {
+    const { page, limit, status } = query;
+    const search = query.search?.trim();
+    const where: Prisma.AiTaskWhereInput = {
+      ...(user.role === UserRole.ADMIN ? {} : { ownerId: user.id }),
+      status,
+      prompt: search
+        ? {
+            contains: search,
+            mode: 'insensitive',
+          }
+        : undefined,
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.aiTask.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          prompt: true,
+          status: true,
+          errorMessage: true,
+          attempts: true,
+          retryCount: true,
+          ownerId: true,
+          startedAt: true,
+          completedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: { steps: true },
+          },
+        },
+      }),
+      this.prisma.aiTask.count({ where }),
+    ]);
+
+    return {
+      items: items.map(({ _count, ...task }) => ({
+        ...task,
+        stepCount: _count.steps,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: string, user: AuthenticatedUser) {

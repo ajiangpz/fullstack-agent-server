@@ -4,7 +4,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { Test } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
-import { UserRole } from '../generated/prisma/enums';
+import { AiTaskStatus, UserRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
 import { AiTasksService } from './ai-tasks.service';
@@ -21,6 +21,8 @@ describe('AiTasksService', () => {
       create: jest.fn(),
       update: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
     },
   };
   const queue: Pick<Queue, 'add'> = { add: jest.fn() };
@@ -75,6 +77,76 @@ describe('AiTasksService', () => {
         errorMessage: 'Task could not be queued',
       }),
     });
+  });
+
+  it('lists only the current users tasks with filters and step counts', async () => {
+    prisma.aiTask.findMany.mockResolvedValue([
+      {
+        id: 'task-1',
+        prompt: 'offline devices',
+        status: AiTaskStatus.COMPLETED,
+        errorMessage: null,
+        attempts: 1,
+        retryCount: 0,
+        ownerId: user.id,
+        startedAt: null,
+        completedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        _count: { steps: 5 },
+      },
+    ]);
+    prisma.aiTask.count.mockResolvedValue(1);
+
+    const result = await service.findAll(user, {
+      page: 2,
+      limit: 10,
+      status: AiTaskStatus.COMPLETED,
+      search: ' offline ',
+    });
+
+    expect(prisma.aiTask.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          ownerId: user.id,
+          status: AiTaskStatus.COMPLETED,
+          prompt: {
+            contains: 'offline',
+            mode: 'insensitive',
+          },
+        },
+        skip: 10,
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+    expect(prisma.aiTask.count).toHaveBeenCalledWith({
+      where: {
+        ownerId: user.id,
+        status: AiTaskStatus.COMPLETED,
+        prompt: {
+          contains: 'offline',
+          mode: 'insensitive',
+        },
+      },
+    });
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({ id: 'task-1', stepCount: 5 }),
+    );
+  });
+
+  it('does not apply an owner filter for administrators', async () => {
+    prisma.aiTask.findMany.mockResolvedValue([]);
+    prisma.aiTask.count.mockResolvedValue(0);
+
+    await service.findAll(
+      { ...user, role: UserRole.ADMIN },
+      { page: 1, limit: 20 },
+    );
+
+    expect(prisma.aiTask.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: undefined, prompt: undefined } }),
+    );
   });
 
   it('limits task lookup to the current user and returns trace context', async () => {
