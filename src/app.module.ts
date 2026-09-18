@@ -8,6 +8,7 @@ import { AuditModule } from './audit/audit.module';
 import { DomainEventsModule } from './events/domain-events.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AiTasksModule } from './ai-tasks/ai-tasks.module';
+import { ConversationsModule } from './conversations/conversations.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AiTasksModule } from './ai-tasks/ai-tasks.module';
     DevicesModule,
     AuthModule,
     AuditModule,
+    ConversationsModule,
     AiTasksModule,
   ],
   controllers: [AppController],
