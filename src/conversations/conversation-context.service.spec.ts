@@ -1,6 +1,4 @@
-import {
-  ConversationMessageRole,
-} from '../generated/prisma/enums';
+import { ConversationMessageRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ConversationContextService,
