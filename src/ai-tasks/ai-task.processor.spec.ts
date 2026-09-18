@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import type { Job } from 'bullmq';
+import { ConversationContextService } from '../conversations/conversation-context.service';
+import { UserRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentService } from './agent.service';
 import { AI_TASK_JOB } from './ai-task.constants';
@@ -14,6 +16,7 @@ describe('AiTaskProcessor', () => {
   const agent = { run: jest.fn() };
   const agentSteps = { failTask: jest.fn() };
   const leases = { acquire: jest.fn(), heartbeat: jest.fn() };
+  const conversationContext = { buildForTask: jest.fn() };
   let processor: AiTaskProcessor;
 
   const createJob = (attemptsMade = 0) =>
@@ -31,26 +34,39 @@ describe('AiTaskProcessor', () => {
       agent as unknown as AgentService,
       agentSteps as unknown as AgentStepService,
       leases as unknown as TaskLeaseService,
+      conversationContext as unknown as ConversationContextService,
     );
   });
 
-  it('loads trusted task context and delegates execution to AgentService', async () => {
+  it('loads bounded conversation context and delegates execution to AgentService', async () => {
     const owner = {
       id: 7,
       username: 'user',
       email: 'user@example.com',
-      role: 'USER',
+      role: UserRole.USER,
     };
     leases.acquire.mockResolvedValue({ taskId: 'task-1', token: 'token-1' });
-    prisma.aiTask.findFirstOrThrow.mockResolvedValue({
-      prompt: 'Analyze device 1',
-      owner,
-    });
+    prisma.aiTask.findFirstOrThrow.mockResolvedValue({ owner });
+    conversationContext.buildForTask.mockResolvedValue([
+      { role: 'user', content: 'first question' },
+      { role: 'assistant', content: 'first answer' },
+      { role: 'user', content: 'follow up' },
+    ]);
 
     await processor.process(createJob());
 
+    expect(conversationContext.buildForTask).toHaveBeenCalledWith('task-1');
     expect(agent.run).toHaveBeenCalledWith(
-      expect.arrayContaining([{ role: 'user', content: 'Analyze device 1' }]),
+      [
+        {
+          role: 'system',
+          content:
+            'You are a network device troubleshooting agent. Use tools when required.',
+        },
+        { role: 'user', content: 'first question' },
+        { role: 'assistant', content: 'first answer' },
+        { role: 'user', content: 'follow up' },
+      ],
       expect.objectContaining({
         taskId: 'task-1',
         user: owner,
@@ -62,16 +78,26 @@ describe('AiTaskProcessor', () => {
 
   it('does nothing when another worker claimed the task', async () => {
     leases.acquire.mockResolvedValue(null);
+
     await processor.process(createJob());
+
+    expect(conversationContext.buildForTask).not.toHaveBeenCalled();
     expect(agent.run).not.toHaveBeenCalled();
   });
 
   it('marks final task failure and rethrows agent errors', async () => {
     leases.acquire.mockResolvedValue({ taskId: 'task-1', token: 'token-1' });
     prisma.aiTask.findFirstOrThrow.mockResolvedValue({
-      prompt: 'device?',
-      owner: { id: 7, username: 'user', email: 'u@example.com', role: 'USER' },
+      owner: {
+        id: 7,
+        username: 'user',
+        email: 'u@example.com',
+        role: UserRole.USER,
+      },
     });
+    conversationContext.buildForTask.mockResolvedValue([
+      { role: 'user', content: 'device?' },
+    ]);
     agent.run.mockRejectedValue(new Error('down'));
     agentSteps.failTask.mockResolvedValue(true);
 
