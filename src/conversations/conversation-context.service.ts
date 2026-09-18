@@ -13,64 +13,57 @@ export class ConversationContextService {
   async buildForTask(taskId: string): Promise<AiMessage[]> {
     const task = await this.prisma.aiTask.findUnique({
       where: { id: taskId },
-      select: {
-        id: true,
-        conversation: {
-          select: {
-            messages: {
-              where: {
-                OR: [
-                  {
-                    task: { status: 'COMPLETED' },
-                    role: { in: ['USER', 'ASSISTANT'] },
-                  },
-                  {
-                    taskId,
-                    role: 'USER',
-                  },
-                ],
-              },
-              orderBy: { sequence: 'asc' },
-              select: {
-                taskId: true,
-                role: true,
-                content: true,
-                sequence: true,
-              },
-            },
-          },
-        },
-      },
+      select: { conversationId: true },
     });
 
     if (!task) {
       throw new NotFoundException(`AI task ${taskId} not found`);
     }
 
-    const messages = task.conversation.messages;
-    const current = messages.find(
-      (message) => message.taskId === taskId && message.role === 'USER',
-    );
+    const [current, history] = await Promise.all([
+      this.prisma.conversationMessage.findFirst({
+        where: {
+          taskId,
+          conversationId: task.conversationId,
+          role: 'USER',
+        },
+        select: {
+          role: true,
+          content: true,
+          sequence: true,
+        },
+      }),
+      this.prisma.conversationMessage.findMany({
+        where: {
+          conversationId: task.conversationId,
+          taskId: { not: taskId },
+          task: { status: 'COMPLETED' },
+          role: { in: ['USER', 'ASSISTANT'] },
+        },
+        orderBy: { sequence: 'desc' },
+        take: MAX_HISTORY_MESSAGES - 1,
+        select: {
+          role: true,
+          content: true,
+          sequence: true,
+        },
+      }),
+    ]);
 
     if (!current) {
       throw new Error('Current conversation user message not found');
     }
 
-    const history = messages.filter((message) => message.taskId !== taskId);
     const selected: typeof history = [];
-    let remainingCount = MAX_HISTORY_MESSAGES - 1;
     let remainingChars = Math.max(
       0,
       MAX_HISTORY_CHARS - current.content.length,
     );
 
-    for (let index = history.length - 1; index >= 0; index -= 1) {
-      const message = history[index];
-      if (remainingCount <= 0) break;
+    for (const message of history) {
       if (message.content.length > remainingChars) break;
 
       selected.push(message);
-      remainingCount -= 1;
       remainingChars -= message.content.length;
     }
 

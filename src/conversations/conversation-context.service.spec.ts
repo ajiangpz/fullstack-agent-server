@@ -10,83 +10,79 @@ describe('ConversationContextService', () => {
     aiTask: {
       findUnique: jest.fn(),
     },
+    conversationMessage: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+    },
   };
   let service: ConversationContextService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.aiTask.findUnique.mockResolvedValue({
+      conversationId: 'conv-1',
+    });
+    prisma.conversationMessage.findFirst.mockResolvedValue({
+      role: 'USER',
+      content: 'current',
+      sequence: 3,
+    });
+    prisma.conversationMessage.findMany.mockResolvedValue([]);
     service = new ConversationContextService(
       prisma as unknown as PrismaService,
     );
   });
 
   it('includes completed history and the current user message', async () => {
-    prisma.aiTask.findUnique.mockResolvedValue({
-      id: 'task-3',
-      conversation: {
-        messages: [
-          {
-            taskId: 'task-1',
-            role: 'USER',
-            content: 'first question',
-            sequence: 1,
-          },
-          {
-            taskId: 'task-1',
-            role: 'ASSISTANT',
-            content: 'first answer',
-            sequence: 2,
-          },
-          {
-            taskId: 'task-3',
-            role: 'USER',
-            content: 'follow up',
-            sequence: 4,
-          },
-        ],
-      },
+    prisma.conversationMessage.findFirst.mockResolvedValue({
+      role: 'USER',
+      content: 'follow up',
+      sequence: 3,
     });
+    prisma.conversationMessage.findMany.mockResolvedValue([
+      {
+        role: 'ASSISTANT',
+        content: 'first answer',
+        sequence: 2,
+      },
+      {
+        role: 'USER',
+        content: 'first question',
+        sequence: 1,
+      },
+    ]);
 
     await expect(service.buildForTask('task-3')).resolves.toEqual([
       { role: 'user', content: 'first question' },
       { role: 'assistant', content: 'first answer' },
       { role: 'user', content: 'follow up' },
     ]);
-  });
 
-  it('keeps at most 20 messages including the current user message', async () => {
-    const history = Array.from(
-      { length: MAX_HISTORY_MESSAGES + 5 },
-      (_, index) => ({
-        taskId: `task-${index}`,
-        role: index % 2 === 0 ? 'USER' : 'ASSISTANT',
-        content: `message-${index}`,
-        sequence: index + 1,
-      }),
-    );
-
-    prisma.aiTask.findUnique.mockResolvedValue({
-      id: 'current',
-      conversation: {
-        messages: [
-          ...history,
-          {
-            taskId: 'current',
-            role: 'USER',
-            content: 'current message',
-            sequence: history.length + 1,
-          },
-        ],
+    expect(prisma.conversationMessage.findMany).toHaveBeenCalledWith({
+      where: {
+        conversationId: 'conv-1',
+        taskId: { not: 'task-3' },
+        task: { status: 'COMPLETED' },
+        role: { in: ['USER', 'ASSISTANT'] },
+      },
+      orderBy: { sequence: 'desc' },
+      take: MAX_HISTORY_MESSAGES - 1,
+      select: {
+        role: true,
+        content: true,
+        sequence: true,
       },
     });
+  });
 
-    const result = await service.buildForTask('current');
+  it('queries at most 19 historical messages', async () => {
+    await service.buildForTask('current');
 
-    expect(result).toHaveLength(MAX_HISTORY_MESSAGES);
-    expect(result.at(-1)).toEqual({
-      role: 'user',
-      content: 'current message',
-    });
+    expect(prisma.conversationMessage.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: MAX_HISTORY_MESSAGES - 1,
+      }),
+    );
   });
 
   it('stops adding old history after the character budget', async () => {
@@ -94,31 +90,23 @@ describe('ConversationContextService', () => {
     const oldest = 'o'.repeat(5_000);
     const current = 'c'.repeat(3_000);
 
-    prisma.aiTask.findUnique.mockResolvedValue({
-      id: 'current',
-      conversation: {
-        messages: [
-          {
-            taskId: 'old',
-            role: 'USER',
-            content: oldest,
-            sequence: 1,
-          },
-          {
-            taskId: 'new',
-            role: 'ASSISTANT',
-            content: newest,
-            sequence: 2,
-          },
-          {
-            taskId: 'current',
-            role: 'USER',
-            content: current,
-            sequence: 3,
-          },
-        ],
-      },
+    prisma.conversationMessage.findFirst.mockResolvedValue({
+      role: 'USER',
+      content: current,
+      sequence: 3,
     });
+    prisma.conversationMessage.findMany.mockResolvedValue([
+      {
+        role: 'ASSISTANT',
+        content: newest,
+        sequence: 2,
+      },
+      {
+        role: 'USER',
+        content: oldest,
+        sequence: 1,
+      },
+    ]);
 
     await expect(service.buildForTask('current')).resolves.toEqual([
       { role: 'assistant', content: newest },
@@ -128,25 +116,18 @@ describe('ConversationContextService', () => {
 
   it('always retains the current user message', async () => {
     const current = 'c'.repeat(MAX_HISTORY_CHARS + 1);
-    prisma.aiTask.findUnique.mockResolvedValue({
-      id: 'current',
-      conversation: {
-        messages: [
-          {
-            taskId: 'old',
-            role: 'USER',
-            content: 'old',
-            sequence: 1,
-          },
-          {
-            taskId: 'current',
-            role: 'USER',
-            content: current,
-            sequence: 2,
-          },
-        ],
-      },
+    prisma.conversationMessage.findFirst.mockResolvedValue({
+      role: 'USER',
+      content: current,
+      sequence: 2,
     });
+    prisma.conversationMessage.findMany.mockResolvedValue([
+      {
+        role: 'USER',
+        content: 'old',
+        sequence: 1,
+      },
+    ]);
 
     await expect(service.buildForTask('current')).resolves.toEqual([
       { role: 'user', content: current },
