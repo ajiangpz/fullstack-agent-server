@@ -1,10 +1,18 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { ServiceUnavailableException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
-import { AiTaskStatus, UserRole } from '../generated/prisma/enums';
+import {
+  AiTaskStatus,
+  ConversationMessageRole,
+  UserRole,
+} from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AI_TASK_JOB, AI_TASK_QUEUE } from './ai-task.constants';
 import { AiTasksService } from './ai-tasks.service';
@@ -16,15 +24,34 @@ describe('AiTasksService', () => {
     email: 'user@example.com',
     role: UserRole.USER,
   };
-  const prisma = {
+
+  const tx = {
+    conversation: {
+      updateMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
+    conversationMessage: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
     aiTask: {
       create: jest.fn(),
       update: jest.fn(),
+    },
+  };
+
+  const prisma = {
+    $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+      callback(tx),
+    ),
+    aiTask: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
     },
   };
+
   const queue: Pick<Queue, 'add'> = { add: jest.fn() };
   let service: AiTasksService;
 
@@ -40,20 +67,50 @@ describe('AiTasksService', () => {
     service = module.get(AiTasksService);
   });
 
-  it('persists a pending task before enqueueing a deterministic job', async () => {
-    prisma.aiTask.create.mockResolvedValue({ id: 'task-1' });
+  it('claims the conversation and creates the task with a user message', async () => {
+    tx.conversation.updateMany.mockResolvedValue({ count: 1 });
+    tx.conversationMessage.findFirst.mockResolvedValue({ sequence: 2 });
+    tx.aiTask.create.mockResolvedValue({
+      id: 'task-1',
+      conversationId: 'conv-1',
+    });
+    tx.conversationMessage.create.mockResolvedValue({});
     (queue.add as jest.Mock).mockResolvedValue({ id: 'task-1' });
 
-    await expect(service.create({ prompt: 'hello' }, user)).resolves.toEqual({
-      taskId: 'task-1',
-    });
+    await expect(
+      service.create(
+        { conversationId: 'conv-1', prompt: 'hello' },
+        user,
+      ),
+    ).resolves.toEqual({ taskId: 'task-1' });
 
-    expect(prisma.aiTask.create).toHaveBeenCalledWith({
+    expect(tx.conversation.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'conv-1',
+        ownerId: user.id,
+        busy: false,
+      },
+      data: { busy: true },
+    });
+    expect(tx.aiTask.create).toHaveBeenCalledWith({
       data: {
         prompt: 'hello',
-        owner: { connect: { id: user.id } },
+        ownerId: user.id,
+        conversationId: 'conv-1',
       },
-      select: { id: true },
+      select: {
+        id: true,
+        conversationId: true,
+      },
+    });
+    expect(tx.conversationMessage.create).toHaveBeenCalledWith({
+      data: {
+        conversationId: 'conv-1',
+        taskId: 'task-1',
+        role: ConversationMessageRole.USER,
+        content: 'hello',
+        sequence: 3,
+      },
     });
     expect(queue.add).toHaveBeenCalledWith(
       AI_TASK_JOB,
@@ -62,20 +119,69 @@ describe('AiTasksService', () => {
     );
   });
 
-  it('marks the database task failed when enqueueing fails', async () => {
-    prisma.aiTask.create.mockResolvedValue({ id: 'task-1' });
-    (queue.add as jest.Mock).mockRejectedValue(new Error('redis unavailable'));
-    prisma.aiTask.update.mockResolvedValue({});
+  it('rejects another task while the conversation is busy', async () => {
+    tx.conversation.updateMany.mockResolvedValue({ count: 0 });
+    tx.conversation.findFirst.mockResolvedValue({ id: 'conv-1' });
 
-    await expect(service.create({ prompt: 'hello' }, user)).rejects.toThrow(
-      ServiceUnavailableException,
-    );
-    expect(prisma.aiTask.update).toHaveBeenCalledWith({
+    await expect(
+      service.create(
+        { conversationId: 'conv-1', prompt: 'hello' },
+        user,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(tx.aiTask.create).not.toHaveBeenCalled();
+  });
+
+  it('hides conversations owned by another user', async () => {
+    tx.conversation.updateMany.mockResolvedValue({ count: 0 });
+    tx.conversation.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.create(
+        { conversationId: 'conv-other', prompt: 'hello' },
+        user,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(tx.conversation.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'conv-other',
+        ownerId: user.id,
+      },
+      select: { id: true },
+    });
+  });
+
+  it('marks the task failed and releases the conversation when enqueueing fails', async () => {
+    tx.conversation.updateMany.mockResolvedValue({ count: 1 });
+    tx.conversationMessage.findFirst.mockResolvedValue(null);
+    tx.aiTask.create.mockResolvedValue({
+      id: 'task-1',
+      conversationId: 'conv-1',
+    });
+    tx.conversationMessage.create.mockResolvedValue({});
+    tx.aiTask.update.mockResolvedValue({});
+    tx.conversation.update.mockResolvedValue({});
+    (queue.add as jest.Mock).mockRejectedValue(new Error('redis unavailable'));
+
+    await expect(
+      service.create(
+        { conversationId: 'conv-1', prompt: 'hello' },
+        user,
+      ),
+    ).rejects.toThrow(ServiceUnavailableException);
+
+    expect(tx.aiTask.update).toHaveBeenCalledWith({
       where: { id: 'task-1' },
       data: expect.objectContaining({
         status: 'FAILED',
         errorMessage: 'Task could not be queued',
       }),
+    });
+    expect(tx.conversation.update).toHaveBeenCalledWith({
+      where: { id: 'conv-1' },
+      data: { busy: false },
     });
   });
 

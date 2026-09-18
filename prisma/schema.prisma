@@ -105,8 +105,8 @@ model AiTask {
   leaseExpiresAt DateTime?
   ownerId        Int
   owner          User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  conversationId String?
-  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   startedAt      DateTime?
   completedAt    DateTime?
   createdAt      DateTime      @default(now())
