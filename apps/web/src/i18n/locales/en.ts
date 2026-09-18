@@ -299,6 +299,19 @@ export const en = {
   'settings.language.description':
     'Choose the display language for this browser. The preference is stored locally and does not change API data.',
 
+  'conversation.new': 'New conversation',
+  'conversation.empty': 'Start a conversation with the Network Agent.',
+  'conversation.user': 'You',
+  'conversation.agent': 'Agent',
+  'conversation.loading': 'Loading conversation…',
+  'conversation.busy':
+    'Agent is working. Wait for this task to finish before sending another message.',
+  'conversation.send': 'Send',
+  'conversation.failed':
+    'The previous Agent task failed. You can send another message.',
+  'conversation.restoreError': 'Unable to restore this conversation.',
+  'conversation.createError': 'Unable to create a conversation.',
+
   'validation.email.invalid': 'Enter a valid email address',
   'validation.password.required': 'Password is required',
   'validation.username.min': 'Username must be at least 3 characters',

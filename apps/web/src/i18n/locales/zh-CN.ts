@@ -283,6 +283,18 @@ export const zhCN = {
   'settings.language.description':
     '选择此浏览器的显示语言。偏好保存在本地，不会修改 API 数据。',
 
+  'conversation.new': '新建会话',
+  'conversation.empty': '向 Network Agent 发送第一条消息。',
+  'conversation.user': '你',
+  'conversation.agent': 'Agent',
+  'conversation.loading': '正在加载会话…',
+  'conversation.busy':
+    'Agent 正在执行，请等待当前任务结束后再发送下一条消息。',
+  'conversation.send': '发送',
+  'conversation.failed': '上一条 Agent 任务执行失败，你可以继续发送消息。',
+  'conversation.restoreError': '无法恢复该会话。',
+  'conversation.createError': '无法创建会话。',
+
   'validation.email.invalid': '请输入有效的邮箱地址',
   'validation.password.required': '请输入密码',
   'validation.username.min': '用户名至少需要 3 个字符',

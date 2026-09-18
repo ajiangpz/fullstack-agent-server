@@ -1,6 +1,5 @@
 import { apiRequest } from '@/lib/api-client';
 import { buildAiTaskQuery } from './query';
-import type { AgentPromptInput } from './schema';
 import type {
   AiTask,
   AiTaskQuery,
@@ -9,7 +8,7 @@ import type {
   PaginatedAiTasks,
 } from './types';
 
-export function createAiTask(input: CreateAiTaskInput | AgentPromptInput) {
+export function createAiTask(input: CreateAiTaskInput) {
   return apiRequest<CreateAiTaskResponse>('/ai-tasks', {
     method: 'POST',
     body: JSON.stringify(input),
