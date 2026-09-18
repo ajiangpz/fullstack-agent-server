@@ -73,7 +73,8 @@ export class ConversationContextService {
 
     return [
       ...selected.map((message) => ({
-        role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
+        role:
+          message.role === 'USER' ? ('user' as const) : ('assistant' as const),
         content: message.content,
       })),
       { role: 'user', content: current.content },
