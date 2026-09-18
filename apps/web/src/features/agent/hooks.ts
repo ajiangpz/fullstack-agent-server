@@ -51,9 +51,28 @@ export function useAiTask(
   });
 }
 
-export function useAiTaskRealtime(taskId: string | null) {
+export function useAiTaskRealtime(
+  taskId: string | null,
+  conversationId: string | null = null,
+) {
+  const queryClient = useQueryClient();
   const streamStatus = useAiTaskStream(taskId);
   const taskQuery = useAiTask(taskId, streamStatus !== 'connected');
+  const status = taskQuery.data?.status;
+
+  useEffect(() => {
+    if (
+      !conversationId ||
+      !status ||
+      !isTerminalTaskStatus(status)
+    ) {
+      return;
+    }
+
+    void queryClient.invalidateQueries({
+      queryKey: ['conversation', conversationId],
+    });
+  }, [conversationId, queryClient, status]);
 
   return { ...taskQuery, streamStatus };
 }

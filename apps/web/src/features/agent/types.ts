@@ -1,5 +1,9 @@
 export type AiTaskStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-export type AgentStepType = 'MODEL_CALL' | 'TOOL_CALL' | 'TOOL_RESULT' | 'FINAL_ANSWER';
+export type AgentStepType =
+  | 'MODEL_CALL'
+  | 'TOOL_CALL'
+  | 'TOOL_RESULT'
+  | 'FINAL_ANSWER';
 export type AgentStepStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
 
 export type AiTaskStreamEventType =
@@ -15,6 +19,37 @@ export interface AiTaskStreamEvent {
   type: AiTaskStreamEventType;
   data: unknown;
   emittedAt: string;
+}
+
+export type ConversationMessageRole = 'USER' | 'ASSISTANT';
+
+export interface ConversationMessage {
+  id: string;
+  taskId: string;
+  role: ConversationMessageRole;
+  content: string;
+  sequence: number;
+  createdAt: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  busy: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMessagesResult {
+  conversation: ConversationSummary;
+  messages: ConversationMessage[];
+  activeTaskId: string | null;
+}
+
+export type CreateConversationResponse = ConversationSummary;
+
+export interface CreateAiTaskInput {
+  conversationId: string;
+  prompt: string;
 }
 
 export interface AiTaskResult {
