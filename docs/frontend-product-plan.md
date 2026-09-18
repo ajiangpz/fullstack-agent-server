@@ -80,6 +80,11 @@
 - OpenAI Provider
 - Mock Provider
 - Tool Registry
+- Persistent Conversation / ConversationMessage history
+- One active Task per Conversation
+- Multi-turn user / assistant context
+- History trimming: max 20 messages / 12,000 characters
+- Browser conversation restore
 
 因此前端重点应该围绕这些现有能力设计，而不是先建设大量后端尚未存在的网络功能。
 
@@ -293,6 +298,8 @@ Updated         2026-09-17
 这是平台的核心页面之一。
 
 页面不是普通 ChatGPT Clone，而应该突出 Network Operations 场景。
+
+当前实现支持持久化多轮 Conversation：同一会话内 Task 串行执行，成功完成的 user/assistant 消息会进入后续模型上下文；历史上下文最多保留 20 条消息和 12,000 字符，避免 token 随会话无限增长。浏览器会恢复当前 active Conversation，并在 Task 终态后刷新会话消息。
 
 建议示例 Prompt：
 
