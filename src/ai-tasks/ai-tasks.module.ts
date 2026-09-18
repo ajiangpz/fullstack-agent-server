@@ -5,6 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { DevicesModule } from '../devices/devices.module';
 import { AiTaskProcessor } from './ai-task.processor';
 import { AI_PROVIDER, AI_TASK_QUEUE } from './ai-task.constants';
+import { AiTaskEventBus } from './ai-task-event-bus';
 import { AiTasksController } from './ai-tasks.controller';
 import { AiTasksService } from './ai-tasks.service';
 import { AgentStepService } from './agent-step.service';
@@ -27,6 +28,7 @@ import { TaskLeaseService } from './task-lease.service';
   providers: [
     AiTasksService,
     AiTaskProcessor,
+    AiTaskEventBus,
     AgentService,
     AgentStepService,
     GetDeviceTool,

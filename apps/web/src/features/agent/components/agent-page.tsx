@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   LoaderCircle,
+  Radio,
   Send,
   Sparkles,
   TriangleAlert,
@@ -17,7 +18,7 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ApiError } from '@/lib/api-client';
-import { useAiTask, useCreateAiTask } from '../hooks';
+import { useAiTaskRealtime, useCreateAiTask } from '../hooks';
 import { parseAiTaskResult } from '../result';
 import { agentPromptSchema, type AgentPromptInput } from '../schema';
 import type { AiTaskStatus } from '../types';
@@ -54,7 +55,7 @@ export function AgentPage() {
   const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const createMutation = useCreateAiTask();
-  const taskQuery = useAiTask(taskId);
+  const taskQuery = useAiTaskRealtime(taskId);
   const {
     register,
     handleSubmit,
@@ -159,8 +160,14 @@ export function AgentPage() {
 
               {task.status === 'PENDING' || task.status === 'PROCESSING' ? (
                 <div className="mt-5 flex items-center gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-200">
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                  Polling task status every second…
+                  {taskQuery.streamStatus === 'connected' ? (
+                    <Radio className="h-4 w-4" />
+                  ) : (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  )}
+                  {taskQuery.streamStatus === 'connected'
+                    ? 'Live execution events connected.'
+                    : 'Realtime stream unavailable or reconnecting. Polling fallback remains active.'}
                 </div>
               ) : null}
 
@@ -263,7 +270,7 @@ export function AgentPage() {
               Observable execution
             </div>
             <p className="mt-3 text-sm leading-6 text-zinc-500">
-              Tasks are queued through BullMQ and polled every second until they reach a terminal state.
+              Tasks are queued through BullMQ. The console consumes Redis-backed SSE events in realtime and falls back to polling when the stream is unavailable.
             </p>
             <p className="mt-3 text-sm leading-6 text-zinc-500">
               Open the execution trace to inspect persisted model calls, tool calls, tool results and the final answer without exposing private model reasoning.

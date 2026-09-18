@@ -2,6 +2,21 @@ export type AiTaskStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export type AgentStepType = 'MODEL_CALL' | 'TOOL_CALL' | 'TOOL_RESULT' | 'FINAL_ANSWER';
 export type AgentStepStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
 
+export type AiTaskStreamEventType =
+  | 'snapshot'
+  | 'step.created'
+  | 'step.updated'
+  | 'task.updated'
+  | 'task.completed'
+  | 'task.failed';
+
+export interface AiTaskStreamEvent {
+  taskId: string;
+  type: AiTaskStreamEventType;
+  data: unknown;
+  emittedAt: string;
+}
+
 export interface AiTaskResult {
   answer: string;
   keyPoints: string[];

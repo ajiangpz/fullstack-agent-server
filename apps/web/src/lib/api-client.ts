@@ -24,6 +24,10 @@ function apiBaseUrl() {
   );
 }
 
+export function apiUrl(path: string) {
+  return `${apiBaseUrl()}${path}`;
+}
+
 function errorMessage(message: string | string[]) {
   return Array.isArray(message) ? message.join(', ') : message;
 }
@@ -39,7 +43,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${apiBaseUrl()}${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     headers,
   });

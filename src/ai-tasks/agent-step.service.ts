@@ -1,20 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { AgentStepType } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiTaskEventBus } from './ai-task-event-bus';
 import { LeaseLostError, type TaskLease } from './task-lease.service';
 
 type Ownership = TaskLease | { taskId: string; leaseToken: string };
 
 @Injectable()
 export class AgentStepService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: AiTaskEventBus,
+  ) {}
 
   async createRunning(
     ownership: Ownership,
     type: AgentStepType,
     input?: unknown,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const step = await this.prisma.$transaction(async (tx) => {
       await this.assertOwnership(tx, ownership);
       const lastStep = await tx.agentStep.findFirst({
         where: { taskId: ownership.taskId },
@@ -31,10 +35,13 @@ export class AgentStepService {
         },
       });
     });
+
+    await this.events.publish(ownership.taskId, 'step.created', step);
+    return step;
   }
 
   async completeStep(stepId: string, ownership: Ownership, output?: unknown) {
-    return this.prisma.$transaction(async (tx) => {
+    const step = await this.prisma.$transaction(async (tx) => {
       await this.assertOwnership(tx, ownership);
       return tx.agentStep.update({
         where: { id: stepId, taskId: ownership.taskId },
@@ -46,13 +53,16 @@ export class AgentStepService {
         },
       });
     });
+
+    await this.events.publish(ownership.taskId, 'step.updated', step);
+    return step;
   }
 
   async completeTask(stepId: string, ownership: Ownership, result: string) {
     const completedAt = new Date();
-    return this.prisma.$transaction(async (tx) => {
+    const completed = await this.prisma.$transaction(async (tx) => {
       await this.assertOwnership(tx, ownership);
-      await tx.agentStep.update({
+      const step = await tx.agentStep.update({
         where: { id: stepId, taskId: ownership.taskId },
         data: {
           status: 'COMPLETED',
@@ -61,7 +71,7 @@ export class AgentStepService {
           errorMessage: null,
         },
       });
-      return tx.aiTask.update({
+      const task = await tx.aiTask.update({
         where: { id: ownership.taskId },
         data: {
           status: 'COMPLETED',
@@ -73,17 +83,29 @@ export class AgentStepService {
           leaseExpiresAt: null,
         },
       });
+      return { step, task };
     });
+
+    await this.events.publish(ownership.taskId, 'step.updated', completed.step);
+    await this.events.publish(
+      ownership.taskId,
+      'task.completed',
+      completed.task,
+    );
+    return completed.task;
   }
 
   async failStep(stepId: string, ownership: Ownership, errorMessage: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const step = await this.prisma.$transaction(async (tx) => {
       await this.assertOwnership(tx, ownership);
       return tx.agentStep.update({
         where: { id: stepId, taskId: ownership.taskId },
         data: { status: 'FAILED', errorMessage, completedAt: new Date() },
       });
     });
+
+    await this.events.publish(ownership.taskId, 'step.updated', step);
+    return step;
   }
 
   async failTask(
@@ -107,6 +129,32 @@ export class AgentStepService {
         leaseExpiresAt: null,
       },
     });
+
+    if (failed.count === 1) {
+      const task = await this.prisma.aiTask.findUnique({
+        where: { id: lease.taskId },
+        select: {
+          id: true,
+          status: true,
+          result: true,
+          errorMessage: true,
+          attempts: true,
+          retryCount: true,
+          startedAt: true,
+          completedAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (task) {
+        await this.events.publish(
+          lease.taskId,
+          isFinalAttempt ? 'task.failed' : 'task.updated',
+          task,
+        );
+      }
+    }
+
     return failed.count === 1;
   }
 

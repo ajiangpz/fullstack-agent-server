@@ -1,14 +1,20 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { PrismaService } from '../prisma/prisma.service';
+import { AiTaskEventBus } from './ai-task-event-bus';
 import { TaskLeaseService } from './task-lease.service';
 
 describe('TaskLeaseService', () => {
   const prisma = { aiTask: { updateMany: jest.fn() } };
+  const events = { publish: jest.fn().mockResolvedValue(true) };
   let service: TaskLeaseService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new TaskLeaseService(prisma as unknown as PrismaService);
+    events.publish.mockResolvedValue(true);
+    service = new TaskLeaseService(
+      prisma as unknown as PrismaService,
+      events as unknown as AiTaskEventBus,
+    );
   });
 
   it('claims pending tasks or processing tasks with an expired lease', async () => {
@@ -25,6 +31,11 @@ describe('TaskLeaseService', () => {
           ]),
         }),
       }),
+    );
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'task.updated',
+      expect.objectContaining({ status: 'PROCESSING' }),
     );
   });
 

@@ -1,14 +1,14 @@
 'use client';
 
-import { ArrowLeft, LoaderCircle, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, LoaderCircle, Radio, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
-import { useAiTask } from '../hooks';
+import { useAiTaskRealtime } from '../hooks';
 import { ExecutionTrace } from './execution-trace';
 import { TaskStatusBadge } from './task-status-badge';
 
 export function TaskDetailPage({ taskId }: { taskId: string }) {
-  const taskQuery = useAiTask(taskId);
+  const taskQuery = useAiTaskRealtime(taskId);
   const task = taskQuery.data;
 
   if (taskQuery.isLoading) {
@@ -36,6 +36,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       </Card>
     );
   }
+
+  const active = task.status === 'PENDING' || task.status === 'PROCESSING';
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -65,11 +67,17 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         <Metric label="Duration" value={taskDuration(task.startedAt, task.completedAt)} />
       </div>
 
-      {(task.status === 'PENDING' || task.status === 'PROCESSING') ? (
+      {active ? (
         <Card className="border-cyan-500/20 bg-cyan-500/5 p-4 text-sm text-cyan-200">
           <div className="flex items-center gap-3">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-            The task is still running. This trace refreshes every second.
+            {taskQuery.streamStatus === 'connected' ? (
+              <Radio className="h-4 w-4" />
+            ) : (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            )}
+            {taskQuery.streamStatus === 'connected'
+              ? 'Live execution events connected.'
+              : 'Realtime stream unavailable or reconnecting. Polling fallback remains active.'}
           </div>
         </Card>
       ) : null}

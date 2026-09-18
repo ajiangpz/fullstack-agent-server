@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiTaskEventBus } from './ai-task-event-bus';
 
 export interface TaskLease {
   taskId: string;
@@ -21,7 +22,10 @@ export class TaskLeaseService {
   static readonly heartbeatIntervalMs = 60_000;
   private readonly workerId = `${hostname()}:${process.pid}:${randomUUID()}`;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: AiTaskEventBus,
+  ) {}
 
   async acquire(taskId: string): Promise<TaskLease | null> {
     const now = new Date();
@@ -46,7 +50,16 @@ export class TaskLeaseService {
       },
     });
 
-    return claim.count === 1 ? { taskId, token } : null;
+    if (claim.count !== 1) return null;
+
+    await this.events.publish(taskId, 'task.updated', {
+      status: 'PROCESSING',
+      startedAt: now,
+      completedAt: null,
+      errorMessage: null,
+    });
+
+    return { taskId, token };
   }
 
   async heartbeat(lease: TaskLease): Promise<boolean> {
