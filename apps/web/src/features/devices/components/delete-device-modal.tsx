@@ -18,10 +18,12 @@ export function DeleteDeviceModal({ device, onClose, onDeleted }: DeleteDeviceMo
 
   if (!device) return null;
 
+  const deviceId = device.id;
+
   async function remove() {
     setError(null);
     try {
-      await mutation.mutateAsync(device.id);
+      await mutation.mutateAsync(deviceId);
       onDeleted?.();
       onClose();
     } catch (cause) {
