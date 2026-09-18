@@ -39,11 +39,9 @@ describe('AgentStepService', () => {
     expect(tx.agentStep.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ taskId: 'task-1', sequence: 3 }),
     });
-    expect(events.publish).toHaveBeenCalledWith(
-      'task-1',
-      'step.created',
-      { id: 'step-3' },
-    );
+    expect(events.publish).toHaveBeenCalledWith('task-1', 'step.created', {
+      id: 'step-3',
+    });
   });
 
   it('stops writes after ownership is lost', async () => {
@@ -56,7 +54,10 @@ describe('AgentStepService', () => {
   });
 
   it('clears the lease and publishes terminal task state when a task completes', async () => {
-    tx.agentStep.update.mockResolvedValue({ id: 'step-1', status: 'COMPLETED' });
+    tx.agentStep.update.mockResolvedValue({
+      id: 'step-1',
+      status: 'COMPLETED',
+    });
     tx.aiTask.update.mockResolvedValue({ id: 'task-1', status: 'COMPLETED' });
 
     await service.completeTask('step-1', ownership, '{"answer":"ok"}');
@@ -70,10 +71,9 @@ describe('AgentStepService', () => {
         leaseExpiresAt: null,
       }),
     });
-    expect(events.publish).toHaveBeenCalledWith(
-      'task-1',
-      'task.completed',
-      { id: 'task-1', status: 'COMPLETED' },
-    );
+    expect(events.publish).toHaveBeenCalledWith('task-1', 'task.completed', {
+      id: 'task-1',
+      status: 'COMPLETED',
+    });
   });
 });

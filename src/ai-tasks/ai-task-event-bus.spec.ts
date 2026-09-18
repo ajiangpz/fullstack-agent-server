@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import type { Queue } from 'bullmq';
 import { AiTaskEventBus } from './ai-task-event-bus';
 
@@ -15,9 +15,10 @@ describe('AiTaskEventBus', () => {
     quit,
     on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (event === 'message') {
-        messageHandler = handler as (channel: string, payload: string) => void;
+        messageHandler = (channel, payload) => {
+          handler(channel, payload);
+        };
       }
-      return subscriber;
     }),
   };
 

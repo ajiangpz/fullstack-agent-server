@@ -8,14 +8,14 @@ export interface SseFrame {
   data: string;
 }
 
-const taskEventTypes = new Set<AiTaskStreamEventType>([
+const taskEventTypes: readonly AiTaskStreamEventType[] = [
   'snapshot',
   'step.created',
   'step.updated',
   'task.updated',
   'task.completed',
   'task.failed',
-]);
+];
 
 export function consumeSseBuffer(buffer: string): {
   frames: SseFrame[];
@@ -42,7 +42,7 @@ export function parseAiTaskStreamEvent(
     if (
       typeof event.taskId !== 'string' ||
       typeof event.type !== 'string' ||
-      !taskEventTypes.has(event.type as AiTaskStreamEventType) ||
+      !isTaskEventType(event.type) ||
       typeof event.emittedAt !== 'string' ||
       !('data' in event)
     ) {
@@ -53,6 +53,10 @@ export function parseAiTaskStreamEvent(
   } catch {
     return null;
   }
+}
+
+function isTaskEventType(value: string): value is AiTaskStreamEventType {
+  return taskEventTypes.some((type) => type === value);
 }
 
 function parseFrame(value: string): SseFrame | null {

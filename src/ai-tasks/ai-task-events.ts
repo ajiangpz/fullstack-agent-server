@@ -31,7 +31,9 @@ export function createAiTaskStreamEvent(
   };
 }
 
-export function isAiTaskStreamEvent(value: unknown): value is AiTaskStreamEvent {
+export function isAiTaskStreamEvent(
+  value: unknown,
+): value is AiTaskStreamEvent {
   if (typeof value !== 'object' || value === null) return false;
 
   const event = value as Partial<AiTaskStreamEvent>;

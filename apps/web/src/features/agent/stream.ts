@@ -5,12 +5,12 @@ import type {
   AiTaskStreamEvent,
 } from './types';
 
-const taskStatuses = new Set<AiTaskStatus>([
+const taskStatuses: readonly AiTaskStatus[] = [
   'PENDING',
   'PROCESSING',
   'COMPLETED',
   'FAILED',
-]);
+];
 
 export function reduceAiTaskStreamEvent(
   current: AiTask | undefined,
@@ -39,11 +39,8 @@ function applyTaskPatch(current: AiTask, value: unknown): AiTask {
   const patch = value as Record<string, unknown>;
   const next = { ...current };
 
-  if (
-    typeof patch.status === 'string' &&
-    taskStatuses.has(patch.status as AiTaskStatus)
-  ) {
-    next.status = patch.status as AiTaskStatus;
+  if (typeof patch.status === 'string' && isTaskStatus(patch.status)) {
+    next.status = patch.status;
   }
   if (typeof patch.result === 'string' || patch.result === null) {
     next.result = patch.result;
@@ -75,9 +72,13 @@ function isAiTask(value: unknown): value is AiTask {
     typeof task.id === 'string' &&
     typeof task.prompt === 'string' &&
     typeof task.status === 'string' &&
-    taskStatuses.has(task.status as AiTaskStatus) &&
+    isTaskStatus(task.status) &&
     Array.isArray(task.steps)
   );
+}
+
+function isTaskStatus(value: string): value is AiTaskStatus {
+  return taskStatuses.some((status) => status === value);
 }
 
 function isAgentStep(value: unknown): value is AgentStep {

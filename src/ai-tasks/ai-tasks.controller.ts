@@ -39,10 +39,7 @@ export class AiTasksController {
 
   @ApiOperation({ summary: '创建 AI 任务' })
   @Post()
-  create(
-    @Body() dto: CreateAiTaskDto,
-    @Req() request: AuthenticatedRequest,
-  ) {
+  create(@Body() dto: CreateAiTaskDto, @Req() request: AuthenticatedRequest) {
     return this.aiTasksService.create(dto, request.user);
   }
 
@@ -148,10 +145,7 @@ export class AiTasksController {
 
   @ApiOperation({ summary: '查询 AI 任务详情' })
   @Get(':id')
-  findOne(
-    @Param('id') id: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
+  findOne(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
     return this.aiTasksService.findOne(id, request.user);
   }
 }
