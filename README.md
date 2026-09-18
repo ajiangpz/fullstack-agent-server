@@ -75,6 +75,35 @@ OPENAI_MAX_OUTPUT_TOKENS=2048
 OpenAI API. `OPENAI_INSTRUCTIONS` can provide application-level instructions.
 Provider SDK retries default to zero because BullMQ owns the task retry policy.
 
+To use the DeepSeek Chat Completions API, select the `deepseek` provider. The base URL
+and model are explicit so deployments can choose the current Flash alias or a
+compatible gateway:
+
+```dotenv
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your-api-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-flash
+DEEPSEEK_TIMEOUT_MS=60000
+DEEPSEEK_MAX_RETRIES=0
+DEEPSEEK_MAX_OUTPUT_TOKENS=2048
+```
+
+`DEEPSEEK_INSTRUCTIONS` can provide application-level instructions. The
+timeout, retry, output-token, and instructions settings are optional.
+`DEEPSEEK_BASE_URL` accepts either an API root URL or a full URL ending in
+`/chat/completions`.
+
+When PostgreSQL runs locally but Redis is reached through the configured SSH
+server, start the API with:
+
+```bash
+npm run start:remote-redis
+```
+
+This mode keeps `DATABASE_URL` unchanged and only forwards Redis to
+`LOCAL_REDIS_TUNNEL_PORT`.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

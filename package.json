@@ -12,6 +12,7 @@
     "prepare": "husky",
     "start": "nest start",
     "start:remote": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-remote.ps1 -Mode start",
+    "start:remote-redis": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-remote.ps1 -Mode start-local-db",
     "migrate:remote": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-remote.ps1 -Mode migrate",
     "studio:remote": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-remote.ps1 -Mode studio",
     "start:dev": "nest start --watch",

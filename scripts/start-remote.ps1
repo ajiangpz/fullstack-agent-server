@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('start', 'studio', 'migrate')]
+    [ValidateSet('start', 'start-local-db', 'studio', 'migrate')]
     [string]$Mode = 'start'
 )
 
@@ -49,12 +49,20 @@ Import-EnvFile -Path (Join-Path $projectRoot '.env.remote.local')
 $requiredVariables = @(
     'DATABASE_URL',
     'REMOTE_SSH_HOST',
-    'REMOTE_SSH_USER',
-    'REMOTE_DB_HOST',
-    'REMOTE_DB_PORT'
+    'REMOTE_SSH_USER'
 )
 
-if ($Mode -eq 'start') {
+$useDatabaseTunnel = $Mode -ne 'start-local-db'
+$useRedisTunnel = $Mode -in @('start', 'start-local-db')
+
+if ($useDatabaseTunnel) {
+    $requiredVariables += @(
+        'REMOTE_DB_HOST',
+        'REMOTE_DB_PORT'
+    )
+}
+
+if ($useRedisTunnel) {
     $requiredVariables += @(
         'REMOTE_REDIS_HOST',
         'REMOTE_REDIS_PORT',
@@ -69,30 +77,34 @@ foreach ($name in $requiredVariables) {
     }
 }
 
-$localPortVariable = if ($Mode -eq 'studio') {
-    'LOCAL_STUDIO_DB_TUNNEL_PORT'
-}
-else {
-    'LOCAL_DB_TUNNEL_PORT'
+$localDatabasePort = $null
+if ($useDatabaseTunnel) {
+    $localPortVariable = if ($Mode -eq 'studio') {
+        'LOCAL_STUDIO_DB_TUNNEL_PORT'
+    }
+    else {
+        'LOCAL_DB_TUNNEL_PORT'
+    }
+
+    $localPortValue = [Environment]::GetEnvironmentVariable($localPortVariable)
+    if ([string]::IsNullOrWhiteSpace($localPortValue)) {
+        throw "$localPortVariable is not configured."
+    }
+    $localDatabasePort = [int]$localPortValue
 }
 
-$localPortValue = [Environment]::GetEnvironmentVariable($localPortVariable)
-if ([string]::IsNullOrWhiteSpace($localPortValue)) {
-    throw "$localPortVariable is not configured."
-}
-
-$localPort = [int]$localPortValue
-$localRedisPort = if ($Mode -eq 'start') {
+$localRedisPort = if ($useRedisTunnel) {
     [int]$env:LOCAL_REDIS_TUNNEL_PORT
 }
 else {
     $null
 }
-$tunnelPorts = if ($Mode -eq 'start') {
-    @($localPort, $localRedisPort)
+$tunnelPorts = @()
+if ($useDatabaseTunnel) {
+    $tunnelPorts += $localDatabasePort
 }
-else {
-    @($localPort)
+if ($useRedisTunnel) {
+    $tunnelPorts += $localRedisPort
 }
 $existingListener = Get-NetTCPConnection `
     -LocalPort $tunnelPorts `
@@ -106,7 +118,7 @@ if ($existingListener) {
         $existingListener.OwningProcess | Sort-Object -Unique
     )
     $expectedForward = (
-        "-L ${localPort}:$($env:REMOTE_DB_HOST):$($env:REMOTE_DB_PORT)"
+        "-L ${localDatabasePort}:$($env:REMOTE_DB_HOST):$($env:REMOTE_DB_PORT)"
     )
     $expectedTarget = (
         "$($env:REMOTE_SSH_USER)@$($env:REMOTE_SSH_HOST)"
@@ -120,9 +132,10 @@ if ($existingListener) {
         }
     )
     $matchingDatabaseTunnel = (
-        $Mode -ne 'start' -and
+        $useDatabaseTunnel -and
+        -not $useRedisTunnel -and
         $listenerPorts.Count -eq 1 -and
-        $listenerPorts[0] -eq $localPort -and
+        $listenerPorts[0] -eq $localDatabasePort -and
         $existingProcesses.Count -eq 1 -and
         $existingProcesses[0].Name -eq 'ssh.exe' -and
         $existingProcesses[0].CommandLine.Contains($expectedForward) -and
@@ -165,15 +178,20 @@ try {
     $sshArguments = @(
         '-T',
         '-N',
-        '-L',
-        "${localPort}:$($env:REMOTE_DB_HOST):$($env:REMOTE_DB_PORT)",
         '-o',
         'ConnectTimeout=10',
         '-o',
         'ExitOnForwardFailure=yes'
     )
 
-    if ($Mode -eq 'start') {
+    if ($useDatabaseTunnel) {
+        $sshArguments += @(
+            '-L',
+            "${localDatabasePort}:$($env:REMOTE_DB_HOST):$($env:REMOTE_DB_PORT)"
+        )
+    }
+
+    if ($useRedisTunnel) {
         $sshArguments += @(
             '-L',
             "${localRedisPort}:$($env:REMOTE_REDIS_HOST):$($env:REMOTE_REDIS_PORT)"
@@ -249,19 +267,23 @@ powershell.exe -NoProfile -NonInteractive -Command "[Console]::Out.Write($env:CO
         }
     }
 
-    $remoteDatabaseEndpoint = "@127.0.0.1:$localPort/"
-    $env:DATABASE_URL = $originalDatabaseUrl -replace '@[^/]+/', $remoteDatabaseEndpoint
-    if ($Mode -eq 'start') {
+    if ($useDatabaseTunnel) {
+        $remoteDatabaseEndpoint = "@127.0.0.1:$localDatabasePort/"
+        $env:DATABASE_URL = $originalDatabaseUrl -replace '@[^/]+/', $remoteDatabaseEndpoint
+        if ($env:DATABASE_URL -eq $originalDatabaseUrl) {
+            throw 'DATABASE_URL is not a supported PostgreSQL connection URL.'
+        }
+    }
+
+    if ($useRedisTunnel) {
         $env:REDIS_HOST = '127.0.0.1'
         $env:REDIS_PORT = [string]$localRedisPort
     }
 
-    if ($env:DATABASE_URL -eq $originalDatabaseUrl) {
-        throw 'DATABASE_URL is not a supported PostgreSQL connection URL.'
+    if ($useDatabaseTunnel) {
+        Write-Host "Database tunnel ready on 127.0.0.1:$localDatabasePort."
     }
-
-    Write-Host "Database tunnel ready on 127.0.0.1:$localPort."
-    if ($Mode -eq 'start') {
+    if ($useRedisTunnel) {
         Write-Host "Redis tunnel ready on 127.0.0.1:$localRedisPort."
     }
 

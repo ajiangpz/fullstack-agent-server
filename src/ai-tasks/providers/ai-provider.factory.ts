@@ -1,4 +1,5 @@
 import type { AiProvider } from './ai-provider';
+import { DeepSeekProvider } from './deepseek.provider';
 import { MockAiProvider } from './mock-ai.provider';
 import { OpenAiProvider } from './openai.provider';
 
@@ -14,8 +15,8 @@ export function createAiProvider(env: Environment = process.env): AiProvider {
       );
     case 'openai':
       return new OpenAiProvider({
-        apiKey: readRequired(env, 'OPENAI_API_KEY'),
-        model: readRequired(env, 'OPENAI_MODEL'),
+        apiKey: readRequired(env, 'OPENAI_API_KEY', provider),
+        model: readRequired(env, 'OPENAI_MODEL', provider),
         baseURL: readOptional(env, 'OPENAI_BASE_URL'),
         timeoutMs: readInteger(
           env,
@@ -33,17 +34,42 @@ export function createAiProvider(env: Environment = process.env): AiProvider {
         ),
         instructions: readOptional(env, 'OPENAI_INSTRUCTIONS'),
       });
+    case 'deepseek':
+      return new DeepSeekProvider({
+        apiKey: readRequired(env, 'DEEPSEEK_API_KEY', provider),
+        baseURL: readRequired(env, 'DEEPSEEK_BASE_URL', provider),
+        model: readRequired(env, 'DEEPSEEK_MODEL', provider),
+        timeoutMs: readInteger(
+          env,
+          'DEEPSEEK_TIMEOUT_MS',
+          60_000,
+          1_000,
+          300_000,
+        ),
+        maxRetries: readInteger(env, 'DEEPSEEK_MAX_RETRIES', 0, 0, 5),
+        maxOutputTokens: readOptionalInteger(
+          env,
+          'DEEPSEEK_MAX_OUTPUT_TOKENS',
+          1,
+          393_216,
+        ),
+        instructions: readOptional(env, 'DEEPSEEK_INSTRUCTIONS'),
+      });
     default:
       throw new Error(
-        `Unsupported AI_PROVIDER "${provider}". Expected "mock" or "openai".`,
+        `Unsupported AI_PROVIDER "${provider}". Expected "mock", "openai", or "deepseek".`,
       );
   }
 }
 
-function readRequired(env: Environment, name: string): string {
+function readRequired(
+  env: Environment,
+  name: string,
+  provider: string,
+): string {
   const value = readOptional(env, name);
   if (!value) {
-    throw new Error(`${name} is required when AI_PROVIDER=openai`);
+    throw new Error(`${name} is required when AI_PROVIDER=${provider}`);
   }
   return value;
 }
