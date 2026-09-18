@@ -113,12 +113,20 @@ export function AgentPage() {
 
   const taskActive =
     task?.status === 'PENDING' || task?.status === 'PROCESSING';
+  const restoringConversation =
+    !hasConversationHydrated ||
+    Boolean(activeConversationId && conversationQuery.isLoading);
+  const restoreFailed = Boolean(
+    activeConversationId && conversationQuery.isError,
+  );
   const isBusy =
     conversationQuery.data?.conversation.busy === true ||
     createConversationMutation.isPending ||
     createTaskMutation.isPending ||
     (Boolean(taskId) && taskQuery.isLoading) ||
     taskActive;
+  const composerDisabled =
+    restoringConversation || restoreFailed || isBusy;
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
@@ -283,7 +291,7 @@ export function AgentPage() {
               <textarea
                 className="min-h-28 w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
                 placeholder={t('agent.placeholder')}
-                disabled={isBusy}
+                disabled={composerDisabled}
                 {...register('prompt')}
               />
               {errors.prompt ? (
@@ -302,7 +310,7 @@ export function AgentPage() {
                 </div>
               ) : null}
               <div className="flex justify-end">
-                <Button type="submit" disabled={isBusy}>
+                <Button type="submit" disabled={composerDisabled}>
                   {createConversationMutation.isPending ||
                   createTaskMutation.isPending ? (
                     <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
@@ -337,7 +345,7 @@ export function AgentPage() {
                   <button
                     key={key}
                     type="button"
-                    disabled={isBusy}
+                    disabled={composerDisabled}
                     className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-left text-sm leading-5 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() =>
                       setValue('prompt', prompt, { shouldValidate: true })
