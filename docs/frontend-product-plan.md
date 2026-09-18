@@ -13,6 +13,7 @@
 - 管理网络设备及其运行状态。
 - 通过自然语言让 Agent 查询、分析和操作网络设备。
 - 可视化 Agent 的模型调用、工具调用、工具结果和最终回答过程。
+- 支持持久化多轮 Conversation，并对历史上下文做确定性裁剪。
 - 展示异步任务、重试、执行状态和审计过程。
 - 后续扩展端口、VLAN、PoE、流量、告警、拓扑等网络管理能力。
 
@@ -66,7 +67,28 @@
 - Task Lease
 - Heartbeat
 
-### 2.4 Agent Runtime
+### 2.4 Conversation 多轮上下文
+
+当前已具备：
+
+- 持久化 `Conversation / ConversationMessage`
+- AI Task 通过 `conversationId` 归属会话
+- 同一 Conversation 同时最多一个 `PENDING / PROCESSING` Task
+- 已完成 user / assistant 历史自动注入 Agent 上下文
+- 失败回合保留展示，但不注入后续模型上下文
+- 历史上下文最多 20 条消息、12,000 字符
+- 浏览器通过 localStorage 恢复当前 Conversation
+- Task SSE 到达终态后自动刷新 Conversation Messages
+
+当前版本采用确定性的消息数 + 字符预算裁剪，尚未增加 LLM Summary。后续会话规模继续增长时，可以演进为：
+
+```text
+Conversation Summary
++
+Recent Messages
+```
+
+### 2.5 Agent Runtime
 
 当前 Agent Runtime 已具备：
 
@@ -293,6 +315,16 @@ Updated         2026-09-17
 这是平台的核心页面之一。
 
 页面不是普通 ChatGPT Clone，而应该突出 Network Operations 场景。
+
+当前页面已经升级为持久化多轮 Conversation：
+
+- 同一会话保留多轮 User / Agent 消息。
+- 首次发送自动创建 Conversation。
+- 后续 Task 复用同一 `conversationId`。
+- 刷新页面后恢复最近使用的 Conversation。
+- 当前 Task 执行期间禁止同一 Conversation 并发提交。
+- Task 完成后 ASSISTANT Message 从服务端持久化历史中刷新。
+- 执行过程继续通过 Task SSE 和 Execution Trace 展示。
 
 建议示例 Prompt：
 
@@ -1200,6 +1232,22 @@ Audit
 - SSE
 - Agent Step Streaming
 - 实时 Task Status
+
+## Phase 5.5：Multi-turn Conversation
+
+实现：
+
+- Conversation / ConversationMessage 持久化
+- AI Task conversationId
+- 同一 Conversation 串行 Task
+- Processor 多轮历史注入
+- ASSISTANT Message 持久化
+- 最多 20 条 / 12,000 字符上下文裁剪
+- activeConversationId 浏览器恢复
+- 多轮聊天 UI
+- Task SSE 终态刷新会话消息
+
+当前版本不包含 LLM Summary；后续上下文策略可以演进为 Summary + Recent Messages。
 
 ---
 
