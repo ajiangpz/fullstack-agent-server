@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { DevicesModule } from '../devices/devices.module';
+import { ConversationsModule } from '../conversations/conversations.module';
 import { AiTaskProcessor } from './ai-task.processor';
 import { AI_PROVIDER, AI_TASK_QUEUE } from './ai-task.constants';
 import { AiTaskEventBus } from './ai-task-event-bus';
@@ -22,6 +23,7 @@ import { TaskLeaseService } from './task-lease.service';
     PrismaModule,
     AuthModule,
     DevicesModule,
+    ConversationsModule,
     BullModule.registerQueue({ name: AI_TASK_QUEUE }),
   ],
   controllers: [AiTasksController],

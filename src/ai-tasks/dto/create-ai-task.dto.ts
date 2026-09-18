@@ -4,6 +4,20 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateAiTaskDto {
   @ApiProperty({
+    example: 'cm123',
+    minLength: 1,
+    maxLength: 100,
+    description: 'Conversation ID',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  conversationId!: string;
+
+  @ApiProperty({
     example: '请总结最近的设备状态并给出建议',
     minLength: 1,
     maxLength: 10000,
