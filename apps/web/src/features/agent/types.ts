@@ -84,6 +84,37 @@ export interface PaginatedAiTasks {
   };
 }
 
+export type ConversationMessageRole = 'USER' | 'ASSISTANT';
+
+export interface ConversationMessage {
+  id: string;
+  taskId: string;
+  role: ConversationMessageRole;
+  content: string;
+  sequence: number;
+  createdAt: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  busy: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMessagesResult {
+  conversation: ConversationSummary;
+  messages: ConversationMessage[];
+  activeTaskId: string | null;
+}
+
+export type CreateConversationResponse = ConversationSummary;
+
+export interface CreateAiTaskInput {
+  conversationId: string;
+  prompt: string;
+}
+
 export interface CreateAiTaskResponse {
   taskId: string;
 }

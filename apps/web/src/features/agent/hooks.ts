@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   useMutation,
   useQuery,
@@ -51,9 +51,43 @@ export function useAiTask(
   });
 }
 
-export function useAiTaskRealtime(taskId: string | null) {
+export function useAiTaskRealtime(
+  taskId: string | null,
+  conversationId: string | null = null,
+) {
+  const queryClient = useQueryClient();
   const streamStatus = useAiTaskStream(taskId);
   const taskQuery = useAiTask(taskId, streamStatus !== 'connected');
+  const invalidatedTaskRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !conversationId ||
+      !taskId ||
+      !taskQuery.data ||
+      !isTerminalTaskStatus(taskQuery.data.status) ||
+      invalidatedTaskRef.current === taskId
+    ) {
+      return;
+    }
+
+    invalidatedTaskRef.current = taskId;
+    void queryClient.invalidateQueries({
+      queryKey: ['conversation', conversationId],
+    });
+  }, [
+    conversationId,
+    queryClient,
+    taskId,
+    taskQuery.data?.status,
+    taskQuery.data,
+  ]);
+
+  useEffect(() => {
+    if (invalidatedTaskRef.current !== taskId) {
+      invalidatedTaskRef.current = null;
+    }
+  }, [taskId]);
 
   return { ...taskQuery, streamStatus };
 }
