@@ -36,6 +36,15 @@ export class DevicesController {
     return this.devicesService.findAll(request.user, query);
   }
 
+  @ApiOperation({ summary: '获取设备端口状态' })
+  @Get(':id/ports')
+  findPorts(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.devicesService.findPorts(id, request.user);
+  }
+
   @ApiOperation({ summary: '获取单个设备详情' })
   @Get(':id')
   findOne(

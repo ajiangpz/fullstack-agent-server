@@ -3,6 +3,7 @@ import { buildDeviceQuery } from './query';
 import type {
   Device,
   DevicePayload,
+  DevicePortsResult,
   DeviceQuery,
   PaginatedDevices,
 } from './types';
@@ -13,6 +14,10 @@ export function listDevices(query: DeviceQuery) {
 
 export function getDevice(id: number) {
   return apiRequest<Device>(`/devices/${id}`);
+}
+
+export function getDevicePorts(id: number) {
+  return apiRequest<DevicePortsResult>(`/devices/${id}/ports`);
 }
 
 export function createDevice(payload: DevicePayload) {

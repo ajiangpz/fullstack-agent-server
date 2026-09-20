@@ -1,6 +1,7 @@
 export const DEVICE_STATUSES = ['online', 'offline'] as const;
 
 export type DeviceStatus = (typeof DEVICE_STATUSES)[number];
+export type DevicePortStatus = 'up' | 'down';
 
 export interface Device {
   id: number;
@@ -11,6 +12,21 @@ export interface Device {
   ownerId: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DevicePort {
+  id: number;
+  deviceId: number;
+  portNumber: number;
+  status: DevicePortStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DevicePortsResult {
+  device: Pick<Device, 'id' | 'name' | 'ip'>;
+  items: DevicePort[];
+  total: number;
 }
 
 export interface DevicePagination {

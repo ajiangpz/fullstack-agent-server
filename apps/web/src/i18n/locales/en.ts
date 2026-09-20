@@ -150,6 +150,18 @@ export const en = {
   'device.field.deviceId': 'Device ID',
   'device.field.created': 'Created',
   'device.field.updated': 'Updated',
+  'device.ports.title': 'Port status',
+  'device.ports.description':
+    'Persisted interface status for the ports on this device.',
+  'device.ports.count': '{count} ports',
+  'device.ports.loading': 'Loading port status…',
+  'device.ports.error': 'Unable to load port status.',
+  'device.ports.empty': 'No ports are recorded for this device.',
+  'device.ports.table.port': 'Port',
+  'device.ports.table.status': 'Status',
+  'device.ports.table.updated': 'Updated',
+  'device.ports.status.up': 'Up',
+  'device.ports.status.down': 'Down',
   'device.boundary.title': 'Phase 2 boundary',
   'device.boundary.description':
     'CPU, memory, VLAN, PoE, traffic and topology are intentionally not displayed until the backend exposes real device telemetry.',

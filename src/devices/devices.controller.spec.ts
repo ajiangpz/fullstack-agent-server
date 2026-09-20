@@ -30,7 +30,14 @@ describe('DevicesController', () => {
     expect(controller).toBeDefined();
   });
 
-  it.each(['findAll', 'findOne', 'create', 'update', 'remove'] as const)(
+  it.each([
+    'findAll',
+    'findPorts',
+    'findOne',
+    'create',
+    'update',
+    'remove',
+  ] as const)(
     'allows authenticated users to call %s so ownership can be enforced',
     (method) => {
       expect(

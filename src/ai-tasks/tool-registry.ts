@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AgentTool } from './tools/agent-tool.interface';
 import { GetDeviceTool } from './tools/get-device.tool';
+import { ListDevicePortsTool } from './tools/list-device-ports.tool';
 import { ListDevicesTool } from './tools/list-devices.tool';
 import { SearchDevicesTool } from './tools/search-devices.tool';
 
@@ -11,10 +12,12 @@ export class ToolRegistry {
 
   constructor(
     private readonly getDeviceTool: GetDeviceTool,
+    private readonly listDevicePortsTool: ListDevicePortsTool,
     private readonly listDevicesTool: ListDevicesTool,
     private readonly searchDevicesTool: SearchDevicesTool,
   ) {
     this.register(getDeviceTool);
+    this.register(listDevicePortsTool);
     this.register(listDevicesTool);
     this.register(searchDevicesTool);
   }

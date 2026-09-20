@@ -5,6 +5,7 @@ import {
   createDevice,
   deleteDevice,
   getDevice,
+  getDevicePorts,
   listDevices,
   updateDevice,
 } from './api';
@@ -25,6 +26,14 @@ export function useDevice(id: number) {
   });
 }
 
+export function useDevicePorts(id: number) {
+  return useQuery({
+    queryKey: ['device', id, 'ports'],
+    queryFn: () => getDevicePorts(id),
+    enabled: Number.isInteger(id) && id > 0,
+  });
+}
+
 export function useCreateDevice() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -41,6 +50,9 @@ export function useUpdateDevice() {
     onSuccess: (device) => {
       void queryClient.invalidateQueries({ queryKey: ['devices'] });
       void queryClient.invalidateQueries({ queryKey: ['device', device.id] });
+      void queryClient.invalidateQueries({
+        queryKey: ['device', device.id, 'ports'],
+      });
     },
   });
 }

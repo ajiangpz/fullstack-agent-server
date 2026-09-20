@@ -18,6 +18,11 @@ enum DeviceStatus {
   offline
 }
 
+enum DevicePortStatus {
+  up
+  down
+}
+
 enum UserRole {
   ADMIN
   USER
@@ -166,11 +171,26 @@ model Device {
   status    DeviceStatus @default(offline)
   ownerId   Int
   owner     User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  ports     DevicePort[]
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
   @@index([ownerId])
   @@map("devices")
+}
+
+model DevicePort {
+  id         Int              @id @default(autoincrement())
+  deviceId   Int
+  device     Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  portNumber Int
+  status     DevicePortStatus @default(down)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([deviceId, portNumber])
+  @@index([deviceId, status])
+  @@map("device_ports")
 }
 
 model User {

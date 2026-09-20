@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useTranslation } from '@/i18n/use-translation';
-import { useDevice } from '../hooks';
+import { useDevice, useDevicePorts } from '../hooks';
 import { DeleteDeviceModal } from './delete-device-modal';
 import { DeviceFormModal } from './device-form-modal';
 import { DeviceStatusBadge } from './device-status-badge';
@@ -15,6 +15,7 @@ import { DeviceStatusBadge } from './device-status-badge';
 export function DeviceDetail({ deviceId }: { deviceId: number }) {
   const router = useRouter();
   const deviceQuery = useDevice(deviceId);
+  const portsQuery = useDevicePorts(deviceId);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const { t, intlLocale } = useTranslation();
@@ -124,6 +125,83 @@ export function DeviceDetail({ deviceId }: { deviceId: number }) {
         </dl>
       </Card>
 
+      <Card className="overflow-hidden">
+        <div className="border-b border-zinc-800 px-6 py-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-medium text-zinc-100">
+                {t('device.ports.title')}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                {t('device.ports.description')}
+              </p>
+            </div>
+            {portsQuery.data ? (
+              <span className="text-xs text-zinc-600">
+                {t('device.ports.count', { count: portsQuery.data.total })}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {portsQuery.isLoading ? (
+          <div className="px-6 py-8 text-sm text-zinc-500">
+            {t('device.ports.loading')}
+          </div>
+        ) : null}
+
+        {portsQuery.isError ? (
+          <div className="px-6 py-8 text-sm text-red-300">
+            {portsQuery.error instanceof Error
+              ? portsQuery.error.message
+              : t('device.ports.error')}
+          </div>
+        ) : null}
+
+        {!portsQuery.isLoading &&
+        !portsQuery.isError &&
+        (portsQuery.data?.items.length ?? 0) === 0 ? (
+          <div className="px-6 py-8 text-sm text-zinc-500">
+            {t('device.ports.empty')}
+          </div>
+        ) : null}
+
+        {(portsQuery.data?.items.length ?? 0) > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-left text-sm">
+              <thead className="border-b border-zinc-800 bg-zinc-900/60 text-xs uppercase tracking-wide text-zinc-500">
+                <tr>
+                  <th className="px-6 py-3 font-medium">
+                    {t('device.ports.table.port')}
+                  </th>
+                  <th className="px-6 py-3 font-medium">
+                    {t('device.ports.table.status')}
+                  </th>
+                  <th className="px-6 py-3 font-medium">
+                    {t('device.ports.table.updated')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-900">
+                {portsQuery.data?.items.map((port) => (
+                  <tr key={port.id} className="hover:bg-zinc-900/40">
+                    <td className="px-6 py-4 font-mono text-zinc-300">
+                      {port.portNumber}
+                    </td>
+                    <td className="px-6 py-4">
+                      <PortStatusBadge status={port.status} />
+                    </td>
+                    <td className="px-6 py-4 text-zinc-500">
+                      {formatDate(port.updatedAt, intlLocale)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Card>
+
       <Card className="border-dashed p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-600">
           {t('device.boundary.title')}
@@ -144,6 +222,28 @@ export function DeviceDetail({ deviceId }: { deviceId: number }) {
         onDeleted={() => router.replace('/devices')}
       />
     </div>
+  );
+}
+
+function PortStatusBadge({ status }: { status: 'up' | 'down' }) {
+  const { t } = useTranslation();
+  const up = status === 'up';
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium ${
+        up
+          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+          : 'border-zinc-700 bg-zinc-900 text-zinc-400'
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          up ? 'bg-emerald-400' : 'bg-zinc-600'
+        }`}
+      />
+      {up ? t('device.ports.status.up') : t('device.ports.status.down')}
+    </span>
   );
 }
 

@@ -24,6 +24,9 @@ describe('DevicesService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    devicePort: {
+      findMany: jest.Mock;
+    };
   };
   let eventEmitter: { emit: jest.Mock };
 
@@ -66,6 +69,9 @@ describe('DevicesService', () => {
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
+      },
+      devicePort: {
+        findMany: jest.fn(),
       },
     };
     eventEmitter = {
@@ -219,6 +225,43 @@ describe('DevicesService', () => {
     });
   });
 
+  describe('findPorts', () => {
+    it('should return ordered ports for an owned device', async () => {
+      const ports = [
+        { id: 1, deviceId: 1, portNumber: 1, status: 'up' },
+        { id: 2, deviceId: 1, portNumber: 2, status: 'down' },
+      ];
+      prisma.device.findFirst.mockResolvedValue(device);
+      prisma.devicePort.findMany.mockResolvedValue(ports);
+
+      await expect(service.findPorts(1, user)).resolves.toEqual({
+        device: {
+          id: device.id,
+          name: device.name,
+          ip: device.ip,
+        },
+        items: ports,
+        total: 2,
+      });
+      expect(prisma.device.findFirst).toHaveBeenCalledWith({
+        where: { id: 1, ownerId: user.id },
+      });
+      expect(prisma.devicePort.findMany).toHaveBeenCalledWith({
+        where: { deviceId: 1 },
+        orderBy: { portNumber: 'asc' },
+      });
+    });
+
+    it('should skip port lookup when the device is not visible', async () => {
+      prisma.device.findFirst.mockResolvedValue(null);
+
+      await expect(service.findPorts(99, user)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.devicePort.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('create', () => {
     const dto = {
       name: 'Core Switch',
@@ -236,6 +279,13 @@ describe('DevicesService', () => {
         data: {
           ...dto,
           owner: { connect: { id: user.id } },
+          ports: {
+            createMany: {
+              data: Array.from({ length: dto.portCount }, (_, index) => ({
+                portNumber: index + 1,
+              })),
+            },
+          },
         },
       });
       expect(eventEmitter.emit).toHaveBeenCalledWith(
@@ -285,7 +335,20 @@ describe('DevicesService', () => {
       );
       expect(prisma.device.update).toHaveBeenCalledWith({
         where: { id: 1, ownerId: user.id },
-        data: dto,
+        data: {
+          ...dto,
+          ports: {
+            deleteMany: {
+              portNumber: { gt: dto.portCount },
+            },
+            createMany: {
+              data: Array.from({ length: dto.portCount }, (_, index) => ({
+                portNumber: index + 1,
+              })),
+              skipDuplicates: true,
+            },
+          },
+        },
       });
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         DOMAIN_EVENT_NAME,

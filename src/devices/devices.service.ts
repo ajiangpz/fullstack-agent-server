@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isIP } from 'node:net';
-import { Device, Prisma } from '../generated/prisma/client';
+import { Device, DevicePort, Prisma } from '../generated/prisma/client';
 import { UserRole } from '../generated/prisma/enums';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +24,12 @@ export interface PaginatedDevices {
     total: number;
     totalPages: number;
   };
+}
+
+export interface DevicePortsResult {
+  device: Pick<Device, 'id' | 'name' | 'ip'>;
+  items: DevicePort[];
+  total: number;
 }
 
 @Injectable()
@@ -103,12 +109,38 @@ export class DevicesService {
     return device;
   }
 
+  async findPorts(
+    id: number,
+    user: AuthenticatedUser,
+  ): Promise<DevicePortsResult> {
+    const device = await this.findOne(id, user);
+    const items = await this.prisma.devicePort.findMany({
+      where: { deviceId: id },
+      orderBy: { portNumber: 'asc' },
+    });
+
+    return {
+      device: {
+        id: device.id,
+        name: device.name,
+        ip: device.ip,
+      },
+      items,
+      total: items.length,
+    };
+  }
+
   async create(dto: CreateDeviceDto, user: AuthenticatedUser): Promise<Device> {
     try {
       const device = await this.prisma.device.create({
         data: {
           ...dto,
           owner: { connect: { id: user.id } },
+          ports: {
+            createMany: {
+              data: this.buildPortRows(dto.portCount),
+            },
+          },
         },
       });
       this.publishDeviceEvent(AuditAction.DEVICE_CREATED, device, user);
@@ -126,7 +158,22 @@ export class DevicesService {
     try {
       const device = await this.prisma.device.update({
         where: { id, ...this.getOwnershipFilter(user) },
-        data: dto,
+        data: {
+          ...dto,
+          ...(dto.portCount === undefined
+            ? {}
+            : {
+                ports: {
+                  deleteMany: {
+                    portNumber: { gt: dto.portCount },
+                  },
+                  createMany: {
+                    data: this.buildPortRows(dto.portCount),
+                    skipDuplicates: true,
+                  },
+                },
+              }),
+        },
       });
       this.publishDeviceEvent(AuditAction.DEVICE_UPDATED, device, user, {
         changedFields: Object.keys(dto),
@@ -147,6 +194,12 @@ export class DevicesService {
     } catch (error) {
       this.handleWriteError(error, undefined, id);
     }
+  }
+
+  private buildPortRows(portCount: number): Array<{ portNumber: number }> {
+    return Array.from({ length: portCount }, (_, index) => ({
+      portNumber: index + 1,
+    }));
   }
 
   private getOwnershipFilter(
