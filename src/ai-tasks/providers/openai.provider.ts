@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { AI_TASK_RESULT_JSON_SCHEMA } from '../ai-task-result';
 import type {
+  AiFinalResponse,
   AiGenerateWithToolsOptions,
   AiProvider,
   AiResponse,
@@ -97,6 +98,26 @@ export class OpenAiProvider implements AiProvider {
       }
       throw this.normalizeError(error);
     }
+  }
+
+  async streamFinalAnswer(
+    options: AiGenerateWithToolsOptions,
+    onDelta: (delta: string) => void,
+  ): Promise<AiFinalResponse> {
+    const response = await this.generateWithTools({
+      ...options,
+      tools: [],
+    });
+
+    if (response.type !== 'final') {
+      throw new AiProviderError(
+        'OpenAI returned a tool call for a final-answer request',
+        true,
+      );
+    }
+
+    onDelta(response.content);
+    return response;
   }
 
   private parseToolArguments(value: string): unknown {
