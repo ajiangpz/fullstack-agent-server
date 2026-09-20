@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AgentStepType } from '../generated/prisma/enums';
 import { parseAiTaskResult, type AiTaskResult } from './ai-task-result';
+import { AiTaskEventBus } from './ai-task-event-bus';
 import { AI_PROVIDER } from './ai-task.constants';
 import { AgentStepService } from './agent-step.service';
 import type {
@@ -21,6 +22,7 @@ export class AgentService {
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
     private readonly toolRegistry: ToolRegistry,
     private readonly agentSteps: AgentStepService,
+    private readonly events: AiTaskEventBus,
   ) {}
 
   async run(
@@ -34,6 +36,7 @@ export class AgentService {
       description: tool.description,
       parameters: tool.parameters,
     }));
+    let hasSuccessfulToolResult = false;
 
     for (let index = 0; index < this.maxSteps; index++) {
       this.assertActive(context);
@@ -45,10 +48,29 @@ export class AgentService {
       let response: AiResponse;
 
       try {
-        response = await this.aiProvider.generateWithTools({
-          messages: conversation,
-          tools,
-        });
+        if (hasSuccessfulToolResult) {
+          let publishChain = Promise.resolve();
+          response = await this.aiProvider.streamFinalAnswer(
+            {
+              messages: conversation,
+              tools,
+            },
+            (delta) => {
+              if (delta.length === 0) return;
+              publishChain = publishChain.then(async () => {
+                await this.events.publish(context.taskId, 'answer.delta', {
+                  delta,
+                });
+              });
+            },
+          );
+          await publishChain;
+        } else {
+          response = await this.aiProvider.generateWithTools({
+            messages: conversation,
+            tools,
+          });
+        }
         this.assertActive(context);
         await this.agentSteps.completeStep(modelStep.id, context, {
           responseType: response.type,
@@ -155,6 +177,7 @@ export class AgentService {
         }),
       });
       conversation.push(this.toolMessage(toolCall.id, { result: toolResult }));
+      hasSuccessfulToolResult = true;
     }
 
     throw new Error('Agent exceeded maximum steps');
