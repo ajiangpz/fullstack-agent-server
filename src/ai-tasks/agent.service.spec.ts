@@ -68,14 +68,14 @@ describe('AgentService', () => {
       ],
     });
     (aiProvider.streamFinalAnswer as jest.Mock).mockImplementation(
-      async (_options, onDelta: (delta: string) => void) => {
+      (_options, onDelta: (delta: string) => void) => {
         onDelta('{"answer":"off');
         onDelta('line","keyPoints":["device 1"]}');
-        return {
+        return Promise.resolve({
           type: 'final',
           model: 'test-model',
           content: '{"answer":"offline","keyPoints":["device 1"]}',
-        };
+        });
       },
     );
     (tool.schema.safeParse as jest.Mock).mockReturnValue({
