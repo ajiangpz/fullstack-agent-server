@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import OpenAI from 'openai';
 import { OpenAiProvider, OpenAiProviderOptions } from './openai.provider';
 
@@ -98,5 +99,4 @@ describe('OpenAiProvider', () => {
       }),
     );
   });
-
 });
