@@ -30,6 +30,7 @@ import {
 import { useActiveConversationStore } from '../conversation-store';
 import { useAiTaskRealtime, useCreateAiTask } from '../hooks';
 import { agentPromptSchema, type AgentPromptInput } from '../schema';
+import type { ConversationMessage } from '../types';
 import { ConversationMessageList } from './conversation-message-list';
 import { TaskStatusBadge } from './task-status-badge';
 
@@ -137,6 +138,24 @@ export function AgentPage() {
   }
 
   const messages = conversationQuery.data?.messages ?? [];
+  const hasPersistedAssistantMessage =
+    taskId !== null &&
+    messages.some(
+      (message) => message.taskId === taskId && message.role === 'ASSISTANT',
+    );
+  const temporaryMessage: ConversationMessage | undefined =
+    taskId &&
+    task?.status !== 'FAILED' &&
+    !hasPersistedAssistantMessage
+      ? {
+          id: `streaming-${taskId}`,
+          taskId,
+          role: 'ASSISTANT',
+          content: taskQuery.streamedAnswer,
+          sequence: Number.MAX_SAFE_INTEGER,
+          createdAt: task?.createdAt ?? '',
+        }
+      : undefined;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -180,7 +199,10 @@ export function AgentPage() {
             ) : null}
 
             {!conversationQuery.isLoading && !conversationQuery.isError ? (
-              <ConversationMessageList messages={messages} />
+              <ConversationMessageList
+                messages={messages}
+                temporaryMessage={temporaryMessage}
+              />
             ) : null}
 
             {taskActive ? (
