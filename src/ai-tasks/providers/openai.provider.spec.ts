@@ -72,4 +72,31 @@ describe('OpenAiProvider', () => {
       content: '{"answer":"device 1","keyPoints":[]}',
     });
   });
+  it('adapts the final response to the streaming provider contract', async () => {
+    create.mockResolvedValue({
+      model: 'test-model',
+      output: [],
+      output_text: '{"answer":"device 1","keyPoints":[]}',
+    });
+    const deltas: string[] = [];
+
+    await expect(
+      provider.streamFinalAnswer(request, (delta) => deltas.push(delta)),
+    ).resolves.toEqual({
+      type: 'final',
+      model: 'test-model',
+      content: '{"answer":"device 1","keyPoints":[]}',
+    });
+
+    expect(deltas).toEqual(['{"answer":"device 1","keyPoints":[]}']);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: [],
+        text: expect.objectContaining({
+          format: expect.objectContaining({ type: 'json_schema' }),
+        }),
+      }),
+    );
+  });
+
 });
