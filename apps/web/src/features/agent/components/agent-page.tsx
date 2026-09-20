@@ -30,7 +30,7 @@ import {
 import { useActiveConversationStore } from '../conversation-store';
 import { useAiTaskRealtime, useCreateAiTask } from '../hooks';
 import { agentPromptSchema, type AgentPromptInput } from '../schema';
-import type { ConversationMessage } from '../types';
+import type { AiTaskStatus, ConversationMessage } from '../types';
 import { ConversationMessageList } from './conversation-message-list';
 import { TaskStatusBadge } from './task-status-badge';
 
@@ -40,6 +40,38 @@ const suggestionKeys: TranslationKey[] = [
   'agent.suggestion.summary',
   'agent.suggestion.byName',
 ];
+
+export function createTemporaryAssistantMessage({
+  taskId,
+  taskStatus,
+  streamedAnswer,
+  messages,
+  createdAt,
+}: {
+  taskId: string | null;
+  taskStatus: AiTaskStatus | undefined;
+  streamedAnswer: string;
+  messages: ConversationMessage[];
+  createdAt: string | undefined;
+}): ConversationMessage | undefined {
+  if (!taskId || taskStatus === 'FAILED') return undefined;
+  if (
+    messages.some(
+      (message) => message.taskId === taskId && message.role === 'ASSISTANT',
+    )
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: `streaming-${taskId}`,
+    taskId,
+    role: 'ASSISTANT',
+    content: streamedAnswer,
+    sequence: Number.MAX_SAFE_INTEGER,
+    createdAt: createdAt ?? '',
+  };
+}
 
 export function AgentPage() {
   const queryClient = useQueryClient();
@@ -138,24 +170,13 @@ export function AgentPage() {
   }
 
   const messages = conversationQuery.data?.messages ?? [];
-  const hasPersistedAssistantMessage =
-    taskId !== null &&
-    messages.some(
-      (message) => message.taskId === taskId && message.role === 'ASSISTANT',
-    );
-  const temporaryMessage: ConversationMessage | undefined =
-    taskId &&
-    task?.status !== 'FAILED' &&
-    !hasPersistedAssistantMessage
-      ? {
-          id: `streaming-${taskId}`,
-          taskId,
-          role: 'ASSISTANT',
-          content: taskQuery.streamedAnswer,
-          sequence: Number.MAX_SAFE_INTEGER,
-          createdAt: task?.createdAt ?? '',
-        }
-      : undefined;
+  const temporaryMessage = createTemporaryAssistantMessage({
+    taskId,
+    taskStatus: task?.status,
+    streamedAnswer: taskQuery.streamedAnswer,
+    messages,
+    createdAt: task?.createdAt,
+  });
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
