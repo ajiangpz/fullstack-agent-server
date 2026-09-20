@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type {
+  AiFinalResponse,
   AiGenerateWithToolsOptions,
   AiMessage,
   AiProvider,
@@ -124,6 +125,54 @@ export class DeepSeekProvider implements AiProvider {
       }
 
       return { type: 'final', content, ...metadata };
+    } catch (error) {
+      if (error instanceof AiProviderError) {
+        throw error;
+      }
+      throw this.normalizeError(error);
+    }
+  }
+
+  async streamFinalAnswer(
+    { messages }: AiGenerateWithToolsOptions,
+    onDelta: (delta: string) => void,
+  ): Promise<AiFinalResponse> {
+    try {
+      const stream = await this.client.chat.completions.create({
+        model: this.options.model,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              this.options.instructions,
+              'Return the final answer as a JSON object with answer and keyPoints fields.',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          },
+          ...messages.map((message) => this.toDeepSeekMessage(message)),
+        ],
+        max_tokens: this.options.maxOutputTokens,
+        response_format: { type: 'json_object' as const },
+        stream: true,
+      });
+
+      let content = '';
+      let model = this.options.model;
+
+      for await (const chunk of stream) {
+        model = chunk.model || model;
+        const delta = chunk.choices[0]?.delta?.content;
+        if (typeof delta !== 'string' || delta.length === 0) continue;
+        content += delta;
+        onDelta(delta);
+      }
+
+      if (!content.trim()) {
+        throw new AiProviderError('DeepSeek returned an empty response', true);
+      }
+
+      return { type: 'final', model, content };
     } catch (error) {
       if (error instanceof AiProviderError) {
         throw error;
