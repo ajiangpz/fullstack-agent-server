@@ -233,4 +233,49 @@ describe('DeepSeekProvider', () => {
       'DeepSeek did not return a required tool call',
     );
   });
+  it('streams the final JSON answer without tool definitions', async () => {
+    async function* chunks() {
+      yield {
+        model: 'deepseek-flash',
+        choices: [{ delta: { content: '{"answer":"hel' } }],
+      };
+      yield {
+        model: 'deepseek-flash',
+        choices: [{ delta: { content: '' } }],
+      };
+      yield {
+        model: 'deepseek-flash',
+        choices: [{ delta: { content: 'lo","keyPoints":[]}' } }],
+      };
+    }
+
+    create.mockResolvedValue(chunks());
+    const deltas: string[] = [];
+
+    await expect(
+      provider.streamFinalAnswer(request, (delta) => deltas.push(delta)),
+    ).resolves.toEqual({
+      type: 'final',
+      model: 'deepseek-flash',
+      content: '{"answer":"hello","keyPoints":[]}',
+    });
+
+    expect(deltas).toEqual([
+      '{"answer":"hel',
+      'lo","keyPoints":[]}',
+    ]);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stream: true,
+        response_format: { type: 'json_object' },
+      }),
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        tools: expect.anything(),
+        tool_choice: expect.anything(),
+      }),
+    );
+  });
+
 });
