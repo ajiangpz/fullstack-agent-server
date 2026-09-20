@@ -7,7 +7,7 @@ import {
 import { createAiTask, getAiTask, listAiTasks } from './api';
 import { streamAiTaskEvents } from './events-api';
 import { isTerminalTaskStatus } from './result';
-import { reduceAiTaskStreamEvent } from './stream';
+import { extractAnswerDelta, reduceAiTaskStreamEvent } from './stream';
 import type { AiTask, AiTaskQuery } from './types';
 
 export type AiTaskStreamStatus =
@@ -56,7 +56,7 @@ export function useAiTaskRealtime(
   conversationId: string | null = null,
 ) {
   const queryClient = useQueryClient();
-  const streamStatus = useAiTaskStream(taskId);
+  const { status: streamStatus, streamedAnswer } = useAiTaskStream(taskId);
   const taskQuery = useAiTask(taskId, streamStatus !== 'connected');
   const status = taskQuery.data?.status;
 
@@ -74,16 +74,24 @@ export function useAiTaskRealtime(
     });
   }, [conversationId, queryClient, status]);
 
-  return { ...taskQuery, streamStatus };
+  return { ...taskQuery, streamStatus, streamedAnswer };
 }
 
-function useAiTaskStream(taskId: string | null): AiTaskStreamStatus {
+interface AiTaskStreamState {
+  status: AiTaskStreamStatus;
+  streamedAnswer: string;
+}
+
+function useAiTaskStream(taskId: string | null): AiTaskStreamState {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AiTaskStreamStatus>(
     taskId ? 'connecting' : 'idle',
   );
+  const [streamedAnswer, setStreamedAnswer] = useState('');
 
   useEffect(() => {
+    setStreamedAnswer('');
+
     if (!taskId) {
       setStatus('idle');
       return;
@@ -104,6 +112,10 @@ function useAiTaskStream(taskId: string | null): AiTaskStreamStatus {
             if (!disposed) setStatus('connected');
           },
           onEvent: (event) => {
+            const delta = extractAnswerDelta(event);
+            if (delta) {
+              setStreamedAnswer((current) => current + delta);
+            }
             queryClient.setQueryData<AiTask>(
               ['ai-task', taskId],
               (current) => reduceAiTaskStreamEvent(current, event),
@@ -140,5 +152,5 @@ function useAiTaskStream(taskId: string | null): AiTaskStreamStatus {
     };
   }, [queryClient, taskId]);
 
-  return status;
+  return { status, streamedAnswer };
 }
