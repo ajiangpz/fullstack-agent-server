@@ -235,6 +235,7 @@ describe('DeepSeekProvider', () => {
   });
   it('streams the final JSON answer without tool definitions', async () => {
     async function* chunks() {
+      await Promise.resolve();
       yield {
         model: 'deepseek-flash',
         choices: [{ delta: { content: '{"answer":"hel' } }],
@@ -260,10 +261,7 @@ describe('DeepSeekProvider', () => {
       content: '{"answer":"hello","keyPoints":[]}',
     });
 
-    expect(deltas).toEqual([
-      '{"answer":"hel',
-      'lo","keyPoints":[]}',
-    ]);
+    expect(deltas).toEqual(['{"answer":"hel', 'lo","keyPoints":[]}']);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         stream: true,
@@ -277,5 +275,4 @@ describe('DeepSeekProvider', () => {
       }),
     );
   });
-
 });
