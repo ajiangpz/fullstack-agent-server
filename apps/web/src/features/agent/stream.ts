@@ -12,6 +12,19 @@ const taskStatuses: readonly AiTaskStatus[] = [
   'FAILED',
 ];
 
+export function extractAnswerDelta(event: AiTaskStreamEvent): string | null {
+  if (
+    event.type !== 'answer.delta' ||
+    typeof event.data !== 'object' ||
+    event.data === null
+  ) {
+    return null;
+  }
+
+  const delta = (event.data as { delta?: unknown }).delta;
+  return typeof delta === 'string' && delta.length > 0 ? delta : null;
+}
+
 export function reduceAiTaskStreamEvent(
   current: AiTask | undefined,
   event: AiTaskStreamEvent,
