@@ -46,4 +46,18 @@ describe('SSE parser', () => {
       }),
     ).toBeNull();
   });
+
+  it('accepts answer.delta task events', () => {
+    expect(
+      parseAiTaskStreamEvent({
+        event: 'answer.delta',
+        data: '{"taskId":"task-1","type":"answer.delta","data":{"delta":"he"},"emittedAt":"now"}',
+      }),
+    ).toEqual({
+      taskId: 'task-1',
+      type: 'answer.delta',
+      data: { delta: 'he' },
+      emittedAt: 'now',
+    });
+  });
 });
