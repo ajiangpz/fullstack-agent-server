@@ -3,6 +3,7 @@ export const AI_TASK_EVENT_TYPES = [
   'step.created',
   'step.updated',
   'task.updated',
+  'answer.delta',
   'task.completed',
   'task.failed',
 ] as const;
