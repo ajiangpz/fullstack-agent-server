@@ -6,13 +6,18 @@ import type { ConversationMessage } from '../types';
 
 export function ConversationMessageList({
   messages,
+  temporaryMessage,
 }: {
   messages: ConversationMessage[];
+  temporaryMessage?: ConversationMessage;
 }) {
   const { t } = useTranslation();
   const ordered = sortConversationMessages(messages);
+  const rendered = temporaryMessage
+    ? [...ordered, temporaryMessage]
+    : ordered;
 
-  if (ordered.length === 0) {
+  if (rendered.length === 0) {
     return (
       <div className="px-5 py-16 text-center text-sm text-zinc-500">
         {t('conversation.empty')}
@@ -22,7 +27,7 @@ export function ConversationMessageList({
 
   return (
     <div className="space-y-4 p-5 sm:p-6">
-      {ordered.map((message) => {
+      {rendered.map((message) => {
         const isUser = message.role === 'USER';
 
         return (
