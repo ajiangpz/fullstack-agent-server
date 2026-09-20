@@ -102,7 +102,7 @@ export const en = {
   'dashboard.recentTasks.retries': '{count} retries',
   'dashboard.audit.title': 'Recent audit activity',
   'dashboard.audit.description':
-    'Latest authentication and device-operation events.',
+    'Latest authentication and device-operation events visible to this account.',
   'dashboard.audit.loading': 'Loading audit activity…',
   'dashboard.audit.error': 'Unable to load audit activity.',
   'dashboard.audit.empty': 'No audit activity has been recorded yet.',
@@ -266,6 +266,10 @@ export const en = {
   'audit.title': 'Audit Logs',
   'audit.description':
     'Review authentication events and device changes recorded by the backend audit domain.',
+  'audit.descriptionAdmin':
+    'Review audit activity across all accounts. Filter by actor when needed.',
+  'audit.descriptionUser':
+    'Review authentication and device-operation history for your account.',
   'audit.adminRequired': 'Administrator access required',
   'audit.adminDescription':
     'Audit logs contain account and device-operation history and are only available to administrators.',

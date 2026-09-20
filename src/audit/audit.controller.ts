@@ -1,9 +1,8 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { UserRole } from '../generated/prisma/enums';
 import { AuditService } from './audit.service';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 
@@ -11,13 +10,15 @@ import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 @ApiBearerAuth()
 @Controller('audit-logs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @ApiOperation({ summary: '查询审计日志' })
   @Get()
-  findAll(@Query() query: QueryAuditLogsDto) {
-    return this.auditService.findAll(query);
+  findAll(
+    @Query() query: QueryAuditLogsDto,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    return this.auditService.findAll(request.user, query);
   }
 }

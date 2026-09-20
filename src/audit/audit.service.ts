@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import type { AuditLog, Prisma } from '../generated/prisma/client';
+import { UserRole } from '../generated/prisma/enums';
 import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
@@ -35,8 +37,12 @@ export class AuditService {
     });
   }
 
-  async findAll(query = new QueryAuditLogsDto()): Promise<PaginatedAuditLogs> {
-    const { page, limit, action, resourceType, actorId } = query;
+  async findAll(
+    user: AuthenticatedUser,
+    query = new QueryAuditLogsDto(),
+  ): Promise<PaginatedAuditLogs> {
+    const { page, limit, action, resourceType } = query;
+    const actorId = user.role === UserRole.ADMIN ? query.actorId : user.id;
     const where: Prisma.AuditLogWhereInput = {
       action,
       resourceType: resourceType?.trim() || undefined,

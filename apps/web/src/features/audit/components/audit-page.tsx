@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Search, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -34,35 +34,11 @@ export function AuditPage() {
   const [resourceType, setResourceType] = useState('');
   const [actorId, setActorId] = useState('');
   const [filterError, setFilterError] = useState<string | null>(null);
-  const auditQuery = useAuditLogs(query, isAdmin);
+  const auditQuery = useAuditLogs(query, Boolean(user));
   const { t, intlLocale } = useTranslation();
 
-  if (!isAdmin) {
-    return (
-      <div className="mx-auto max-w-4xl">
-        <p className="text-sm text-cyan-400">{t('audit.section')}</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-          {t('audit.title')}
-        </h1>
-        <Card className="mt-6 border-amber-500/20 bg-amber-500/5 p-6">
-          <div className="flex items-start gap-3">
-            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
-            <div>
-              <h2 className="font-medium text-amber-200">
-                {t('audit.adminRequired')}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-zinc-500">
-                {t('audit.adminDescription')}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   function applyFilters() {
-    const parsedActorId = parseActorId(actorId);
+    const parsedActorId = isAdmin ? parseActorId(actorId) : undefined;
     if (parsedActorId === null) {
       setFilterError(t('audit.actorInvalid'));
       return;
@@ -74,7 +50,7 @@ export function AuditPage() {
       limit: query.limit,
       action: action || undefined,
       resourceType: resourceType.trim() || undefined,
-      actorId: parsedActorId,
+      actorId: isAdmin ? parsedActorId : undefined,
     });
   }
 
@@ -97,12 +73,18 @@ export function AuditPage() {
           {t('audit.title')}
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-          {t('audit.description')}
+          {t(isAdmin ? 'audit.descriptionAdmin' : 'audit.descriptionUser')}
         </p>
       </div>
 
       <Card className="p-4">
-        <div className="grid gap-3 lg:grid-cols-[220px_minmax(220px,1fr)_160px_auto]">
+        <div
+          className={
+            isAdmin
+              ? 'grid gap-3 lg:grid-cols-[220px_minmax(220px,1fr)_160px_auto]'
+              : 'grid gap-3 lg:grid-cols-[220px_minmax(220px,1fr)_auto]'
+          }
+        >
           <select
             className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-300 outline-none focus:border-cyan-500"
             value={action}
@@ -131,16 +113,18 @@ export function AuditPage() {
             />
           </div>
 
-          <Input
-            type="number"
-            min={1}
-            placeholder={t('audit.actorPlaceholder')}
-            value={actorId}
-            onChange={(event) => setActorId(event.target.value)}
-            onKeyDown={(event) =>
-              event.key === 'Enter' && applyFilters()
-            }
-          />
+          {isAdmin ? (
+            <Input
+              type="number"
+              min={1}
+              placeholder={t('audit.actorPlaceholder')}
+              value={actorId}
+              onChange={(event) => setActorId(event.target.value)}
+              onKeyDown={(event) =>
+                event.key === 'Enter' && applyFilters()
+              }
+            />
+          ) : null}
 
           <div className="flex gap-2">
             <Button variant="secondary" onClick={resetFilters}>

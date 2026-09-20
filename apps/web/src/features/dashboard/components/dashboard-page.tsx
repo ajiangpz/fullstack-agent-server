@@ -32,7 +32,6 @@ const auditActionKeys: Record<AuditAction, TranslationKey> = {
 
 export function DashboardPage() {
   const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.role === 'ADMIN';
   const { t, intlLocale } = useTranslation();
 
   const allDevices = useDevices({ page: 1, limit: 1 });
@@ -53,7 +52,7 @@ export function DashboardPage() {
   });
   const failedTasks = useAiTasks({ page: 1, limit: 1, status: 'FAILED' });
 
-  const recentAudit = useAuditLogs({ page: 1, limit: 5 }, isAdmin);
+  const recentAudit = useAuditLogs({ page: 1, limit: 5 }, Boolean(user));
 
   const totalDevices = allDevices.data?.pagination.total ?? null;
   const onlineCount = onlineDevices.data?.pagination.total ?? null;
@@ -164,7 +163,7 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <div className={isAdmin ? 'grid gap-6 xl:grid-cols-2' : ''}>
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-medium text-zinc-100">
@@ -222,66 +221,64 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        {isAdmin ? (
-          <Card className="overflow-hidden">
-            <div className="border-b border-zinc-800 px-5 py-4">
-              <h2 className="font-medium text-zinc-100">
-                {t('dashboard.audit.title')}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                {t('dashboard.audit.description')}
-              </p>
-            </div>
+        <Card className="overflow-hidden">
+          <div className="border-b border-zinc-800 px-5 py-4">
+            <h2 className="font-medium text-zinc-100">
+              {t('dashboard.audit.title')}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {t('dashboard.audit.description')}
+            </p>
+          </div>
 
-            <div className="divide-y divide-zinc-900">
-              {recentAudit.isLoading ? (
-                <EmptyState>{t('dashboard.audit.loading')}</EmptyState>
-              ) : null}
+          <div className="divide-y divide-zinc-900">
+            {recentAudit.isLoading ? (
+              <EmptyState>{t('dashboard.audit.loading')}</EmptyState>
+            ) : null}
 
-              {recentAudit.isError ? (
-                <EmptyState tone="error">
-                  {t('dashboard.audit.error')}
-                </EmptyState>
-              ) : null}
+            {recentAudit.isError ? (
+              <EmptyState tone="error">
+                {t('dashboard.audit.error')}
+              </EmptyState>
+            ) : null}
 
-              {!recentAudit.isLoading &&
-              !recentAudit.isError &&
-              (recentAudit.data?.items.length ?? 0) === 0 ? (
-                <EmptyState>{t('dashboard.audit.empty')}</EmptyState>
-              ) : null}
+            {!recentAudit.isLoading &&
+            !recentAudit.isError &&
+            (recentAudit.data?.items.length ?? 0) === 0 ? (
+              <EmptyState>{t('dashboard.audit.empty')}</EmptyState>
+            ) : null}
 
-              {recentAudit.data?.items.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 px-5 py-4">
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-500">
-                    <Clock3 className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-zinc-300">
-                      {t(auditActionKeys[log.action])}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-zinc-600">
-                      {log.resourceType}
-                      {log.resourceId ? ` #${log.resourceId}` : ''} ·{' '}
-                      {t('dashboard.audit.actor', {
-                        actor: log.actorId ?? t('common.system'),
-                      })}{' '}
-                      · {formatDate(log.createdAt, intlLocale)}
-                    </p>
-                  </div>
+            {recentAudit.data?.items.map((log) => (
+              <div key={log.id} className="flex items-start gap-3 px-5 py-4">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-500">
+                  <Clock3 className="h-4 w-4" />
                 </div>
-              ))}
-            </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-300">
+                    {t(auditActionKeys[log.action])}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-zinc-600">
+                    {log.resourceType}
+                    {log.resourceId ? ` #${log.resourceId}` : ''} ·{' '}
+                    {t('dashboard.audit.actor', {
+                      actor: log.actorId ?? t('common.system'),
+                    })}{' '}
+                    · {formatDate(log.createdAt, intlLocale)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
 
-            <div className="border-t border-zinc-800 px-5 py-3">
-              <Link
-                href="/audit"
-                className="text-sm font-medium text-cyan-300 hover:text-cyan-200"
-              >
-                {t('dashboard.audit.view')}
-              </Link>
-            </div>
-          </Card>
-        ) : null}
+          <div className="border-t border-zinc-800 px-5 py-3">
+            <Link
+              href="/audit"
+              className="text-sm font-medium text-cyan-300 hover:text-cyan-200"
+            >
+              {t('dashboard.audit.view')}
+            </Link>
+          </div>
+        </Card>
       </div>
     </div>
   );

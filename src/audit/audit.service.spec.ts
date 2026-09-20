@@ -1,10 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuditAction } from '../generated/prisma/enums';
+import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
+import { AuditAction, UserRole } from '../generated/prisma/enums';
 import { DomainEvent } from '../events/domain-event';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
 
 describe('AuditService', () => {
+  const admin: AuthenticatedUser = {
+    id: 1,
+    username: 'admin',
+    email: 'admin@example.com',
+    role: UserRole.ADMIN,
+  };
+  const user: AuthenticatedUser = {
+    id: 7,
+    username: 'user',
+    email: 'user@example.com',
+    role: UserRole.USER,
+  };
   let service: AuditService;
   let prisma: {
     auditLog: {
@@ -59,7 +72,7 @@ describe('AuditService', () => {
     prisma.auditLog.count.mockResolvedValue(21);
 
     await expect(
-      service.findAll({
+      service.findAll(admin, {
         page: 2,
         limit: 10,
         action: AuditAction.USER_LOGGED_IN,
@@ -84,6 +97,30 @@ describe('AuditService', () => {
       where,
       skip: 10,
       take: 10,
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(prisma.auditLog.count).toHaveBeenCalledWith({ where });
+  });
+
+  it('should force regular users to their own actor id', async () => {
+    prisma.auditLog.findMany.mockResolvedValue([]);
+    prisma.auditLog.count.mockResolvedValue(0);
+
+    await service.findAll(user, {
+      page: 1,
+      limit: 20,
+      actorId: 999,
+    });
+
+    const where = {
+      action: undefined,
+      resourceType: undefined,
+      actorId: user.id,
+    };
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
+      where,
+      skip: 0,
+      take: 20,
       orderBy: { createdAt: 'desc' },
     });
     expect(prisma.auditLog.count).toHaveBeenCalledWith({ where });
