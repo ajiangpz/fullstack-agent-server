@@ -7,7 +7,10 @@ import { ToolRegistry } from './tool-registry';
 import type { AgentTool } from './tools/agent-tool.interface';
 
 describe('AgentService', () => {
-  const aiProvider: AiProvider = { generateWithTools: jest.fn() };
+  const aiProvider: AiProvider = {
+    generateWithTools: jest.fn(),
+    streamFinalAnswer: jest.fn(),
+  };
   const tool: AgentTool = {
     name: 'get_device',
     description: 'Get device',
@@ -21,6 +24,9 @@ describe('AgentService', () => {
     completeStep: jest.fn(),
     completeTask: jest.fn(),
     failStep: jest.fn(),
+  };
+  const events = {
+    publish: jest.fn().mockResolvedValue(true),
   };
   const context = {
     taskId: 'task-1',
@@ -43,6 +49,7 @@ describe('AgentService', () => {
       aiProvider,
       registry as unknown as ToolRegistry,
       agentSteps as unknown as AgentStepService,
+      events as never,
     );
   });
 
@@ -53,19 +60,24 @@ describe('AgentService', () => {
       .mockResolvedValueOnce({ id: 'tool-result' })
       .mockResolvedValueOnce({ id: 'model-2' })
       .mockResolvedValueOnce({ id: 'final' });
-    (aiProvider.generateWithTools as jest.Mock)
-      .mockResolvedValueOnce({
-        type: 'tool_call',
-        model: 'test-model',
-        toolCalls: [
-          { id: 'call-1', name: 'get_device', arguments: { deviceId: 1 } },
-        ],
-      })
-      .mockResolvedValueOnce({
-        type: 'final',
-        model: 'test-model',
-        content: '{"answer":"offline","keyPoints":["device 1"]}',
-      });
+    (aiProvider.generateWithTools as jest.Mock).mockResolvedValueOnce({
+      type: 'tool_call',
+      model: 'test-model',
+      toolCalls: [
+        { id: 'call-1', name: 'get_device', arguments: { deviceId: 1 } },
+      ],
+    });
+    (aiProvider.streamFinalAnswer as jest.Mock).mockImplementation(
+      async (_options, onDelta: (delta: string) => void) => {
+        onDelta('{"answer":"off');
+        onDelta('line","keyPoints":["device 1"]}');
+        return {
+          type: 'final',
+          model: 'test-model',
+          content: '{"answer":"offline","keyPoints":["device 1"]}',
+        };
+      },
+    );
     (tool.schema.safeParse as jest.Mock).mockReturnValue({
       success: true,
       data: { deviceId: 1 },
@@ -86,7 +98,20 @@ describe('AgentService', () => {
       },
     );
     expect(tool.execute).toHaveBeenCalledWith({ deviceId: 1 }, context);
-    expect(aiProvider.generateWithTools).toHaveBeenCalledTimes(2);
+    expect(aiProvider.generateWithTools).toHaveBeenCalledTimes(1);
+    expect(aiProvider.streamFinalAnswer).toHaveBeenCalledTimes(1);
+    expect(events.publish).toHaveBeenNthCalledWith(
+      1,
+      'task-1',
+      'answer.delta',
+      { delta: '{"answer":"off' },
+    );
+    expect(events.publish).toHaveBeenNthCalledWith(
+      2,
+      'task-1',
+      'answer.delta',
+      { delta: 'line","keyPoints":["device 1"]}' },
+    );
     expect(agentSteps.completeTask).toHaveBeenCalledWith(
       'final',
       context,
@@ -128,5 +153,6 @@ describe('AgentService', () => {
         ]),
       }),
     );
+    expect(aiProvider.streamFinalAnswer).not.toHaveBeenCalled();
   });
 });
