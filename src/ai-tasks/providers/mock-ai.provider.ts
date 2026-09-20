@@ -45,7 +45,9 @@ export class MockAiProvider implements AiProvider {
   ): Promise<AiFinalResponse> {
     const response = await this.generateWithTools(options);
     if (response.type !== 'final') {
-      throw new Error('Mock provider expected a final answer after tool result');
+      throw new Error(
+        'Mock provider expected a final answer after tool result',
+      );
     }
 
     onDelta(response.content);
