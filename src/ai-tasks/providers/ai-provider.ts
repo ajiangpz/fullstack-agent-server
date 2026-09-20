@@ -40,6 +40,10 @@ export interface AiGenerateWithToolsOptions {
 
 export interface AiProvider {
   generateWithTools(options: AiGenerateWithToolsOptions): Promise<AiResponse>;
+  streamFinalAnswer(
+    options: AiGenerateWithToolsOptions,
+    onDelta: (delta: string) => void,
+  ): Promise<AiFinalResponse>;
 }
 
 export class AiProviderError extends Error {
