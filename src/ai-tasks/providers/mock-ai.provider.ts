@@ -1,4 +1,5 @@
 import type {
+  AiFinalResponse,
   AiGenerateWithToolsOptions,
   AiProvider,
   AiResponse,
@@ -37,5 +38,17 @@ export class MockAiProvider implements AiProvider {
         keyPoints: ['已完成工具调用'],
       }),
     };
+  }
+  async streamFinalAnswer(
+    options: AiGenerateWithToolsOptions,
+    onDelta: (delta: string) => void,
+  ): Promise<AiFinalResponse> {
+    const response = await this.generateWithTools(options);
+    if (response.type !== 'final') {
+      throw new Error('Mock provider expected a final answer after tool result');
+    }
+
+    onDelta(response.content);
+    return response;
   }
 }
