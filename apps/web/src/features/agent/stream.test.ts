@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reduceAiTaskStreamEvent } from './stream';
+import { extractAnswerDelta, reduceAiTaskStreamEvent } from './stream';
 import type { AiTask, AgentStep } from './types';
 
 const task: AiTask = {
@@ -90,5 +90,38 @@ describe('reduceAiTaskStreamEvent', () => {
         steps: current.steps,
       }),
     );
+  });
+});
+
+
+describe('extractAnswerDelta', () => {
+  it('returns non-empty answer deltas', () => {
+    expect(
+      extractAnswerDelta({
+        taskId: 'task-1',
+        type: 'answer.delta',
+        data: { delta: 'he' },
+        emittedAt: 'now',
+      }),
+    ).toBe('he');
+  });
+
+  it('ignores empty or malformed answer deltas', () => {
+    expect(
+      extractAnswerDelta({
+        taskId: 'task-1',
+        type: 'answer.delta',
+        data: { delta: '' },
+        emittedAt: 'now',
+      }),
+    ).toBeNull();
+    expect(
+      extractAnswerDelta({
+        taskId: 'task-1',
+        type: 'answer.delta',
+        data: { delta: 1 },
+        emittedAt: 'now',
+      }),
+    ).toBeNull();
   });
 });
