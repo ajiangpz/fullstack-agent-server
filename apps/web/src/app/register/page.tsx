@@ -26,7 +26,7 @@ export default function RegisterPage() {
           <p className="mb-6 text-xs font-semibold uppercase tracking-[0.3em] text-cyan-400">
             Network Agent
           </p>
-          <h1 className="max-w-2xl text-5xl font-semibold tracking-tight text-white">
+          <h1 className="max-w-2xl text-5xl font-semibold tracking-tight text-zinc-100">
             {t('auth.hero.registerTitle')}
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
@@ -38,7 +38,7 @@ export default function RegisterPage() {
                 key={label}
                 className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
               >
-                <Icon className="mb-3 h-5 w-5 text-cyan-400" />
+                <Icon className="mb-3 h-5 w-5 text-zinc-500" />
                 <p className="text-sm text-zinc-300">{label}</p>
               </div>
             ))}
@@ -50,7 +50,7 @@ export default function RegisterPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">
               Network Agent
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-white">
+            <h2 className="mt-3 text-2xl font-semibold text-zinc-100">
               {t('auth.register.title')}
             </h2>
             <p className="mt-2 text-sm text-zinc-500">
