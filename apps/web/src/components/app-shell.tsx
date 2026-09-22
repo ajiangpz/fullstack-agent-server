@@ -32,6 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
   const { t } = useTranslation();
+  const isAgentPage = pathname === '/agent';
 
   function logout() {
     clearSession();
@@ -39,7 +40,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div
+      className={cn(
+        'bg-zinc-950 text-zinc-100',
+        isAgentPage ? 'h-dvh overflow-hidden' : 'min-h-screen',
+      )}
+    >
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-zinc-800 bg-zinc-950/95 p-4 lg:block">
         <div className="mb-8 px-2">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">
@@ -69,7 +75,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="lg:pl-64">
+      <div
+        className={cn(
+          'lg:pl-64',
+          isAgentPage && 'h-dvh overflow-hidden',
+        )}
+      >
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-5 backdrop-blur lg:px-8">
           <div>
             <p className="text-sm font-medium">{t('shell.header.title')}</p>
@@ -94,7 +105,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Button>
           </div>
         </header>
-        <main className="px-5 py-8 lg:px-8">{children}</main>
+        <main
+          className={cn(
+            'px-5 py-8 lg:px-8',
+            isAgentPage && 'h-[calc(100dvh-4rem)] overflow-hidden',
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
