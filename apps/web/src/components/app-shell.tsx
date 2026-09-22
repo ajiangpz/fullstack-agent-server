@@ -43,7 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div
       className={cn(
         'bg-zinc-950 text-zinc-100',
-        isAgentPage ? 'h-dvh overflow-hidden' : 'min-h-screen',
+        isAgentPage ? 'fixed inset-0 overflow-hidden' : 'min-h-screen',
       )}
     >
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-zinc-800 bg-zinc-950/95 p-4 lg:block">
@@ -78,10 +78,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div
         className={cn(
           'lg:pl-64',
-          isAgentPage && 'h-dvh overflow-hidden',
+          isAgentPage && 'flex h-full min-h-0 flex-col overflow-hidden',
         )}
       >
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-5 backdrop-blur lg:px-8">
+        <header
+          className={cn(
+            'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-5 backdrop-blur lg:px-8',
+            isAgentPage && 'shrink-0',
+          )}
+        >
           <div>
             <p className="text-sm font-medium">{t('shell.header.title')}</p>
             <p className="text-xs text-zinc-500">{t('shell.header.subtitle')}</p>
@@ -108,7 +113,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main
           className={cn(
             'px-5 py-8 lg:px-8',
-            isAgentPage && 'h-[calc(100dvh-4rem)] overflow-hidden',
+            isAgentPage && 'min-h-0 flex-1 overflow-hidden',
           )}
         >
           {children}
