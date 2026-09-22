@@ -221,31 +221,29 @@ export function AgentPage() {
 
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-900 pb-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
-            {t('agent.section')}
-          </p>
-          <div className="mt-1 flex items-baseline gap-3">
-            <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-100 sm:text-2xl">
-              {t('agent.title')}
-            </h1>
-            <p className="hidden truncate text-sm text-zinc-600 md:block">
-              {t('agent.description')}
-            </p>
-          </div>
+      <div className="shrink-0 border-b border-zinc-900 pb-4">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
+          {t('agent.section')}
+        </p>
+        <div className="mt-1 flex items-center justify-between gap-4">
+          <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-100 sm:text-2xl">
+            {t('agent.title')}
+          </h1>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={isBusy}
+            onClick={startNewConversation}
+            className="shrink-0"
+          >
+            <MessageSquarePlus className="mr-2 h-4 w-4" />
+            {t('conversation.new')}
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={isBusy}
-          onClick={startNewConversation}
-          className="shrink-0"
-        >
-          <MessageSquarePlus className="mr-2 h-4 w-4" />
-          {t('conversation.new')}
-        </Button>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-600">
+          {t('agent.description')}
+        </p>
       </div>
 
       <div
