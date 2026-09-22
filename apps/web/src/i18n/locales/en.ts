@@ -172,6 +172,9 @@ export const en = {
   'agent.title': 'Network Agent',
   'agent.description':
     'Ask questions about the devices available to your account. The backend Agent decides when to call network-device tools and returns a structured answer.',
+  'agent.welcome.title': 'What would you like to check?',
+  'agent.welcome.description':
+    'Query device status, find offline devices, filter by port count, or look up a device by name.',
   'agent.ask': 'Ask the network Agent',
   'agent.placeholder': 'Which devices are offline?',
   'agent.run': 'Run task',
