@@ -220,7 +220,7 @@ export function AgentPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-8rem)] min-h-[34rem] w-full flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-900 pb-4">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
