@@ -49,22 +49,15 @@ export class AgentService {
 
       try {
         if (hasSuccessfulToolResult) {
-          let publishChain = Promise.resolve();
+          // Provider 流式返回的是 Structured Output 的原始 JSON 片段，
+          // 不能直接把这些协议数据当作用户可见答案发布。
           response = await this.aiProvider.streamFinalAnswer(
             {
               messages: conversation,
               tools,
             },
-            (delta) => {
-              if (delta.length === 0) return;
-              publishChain = publishChain.then(async () => {
-                await this.events.publish(context.taskId, 'answer.delta', {
-                  delta,
-                });
-              });
-            },
+            () => undefined,
           );
-          await publishChain;
         } else {
           response = await this.aiProvider.generateWithTools({
             messages: conversation,
@@ -89,6 +82,10 @@ export class AgentService {
 
       if (response.type === 'final') {
         const result = parseAiTaskResult(response.content);
+        // answer.delta 只发布已经解析、验证后的领域答案，避免把 JSON 转义字符泄漏到 UI。
+        await this.events.publish(context.taskId, 'answer.delta', {
+          delta: result.answer,
+        });
         const finalStep = await this.agentSteps.createRunning(
           context,
           AgentStepType.FINAL_ANSWER,

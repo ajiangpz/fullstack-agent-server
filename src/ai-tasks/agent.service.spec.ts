@@ -70,11 +70,12 @@ describe('AgentService', () => {
     (aiProvider.streamFinalAnswer as jest.Mock).mockImplementation(
       (_options, onDelta: (delta: string) => void) => {
         onDelta('{"answer":"off');
-        onDelta('line","keyPoints":["device 1"]}');
+        onDelta('line\\n\\nDevice 1","keyPoints":["device 1"]}');
         return Promise.resolve({
           type: 'final',
           model: 'test-model',
-          content: '{"answer":"offline","keyPoints":["device 1"]}',
+          content:
+            '{"answer":"offline\\n\\nDevice 1","keyPoints":["device 1"]}',
         });
       },
     );
@@ -86,7 +87,10 @@ describe('AgentService', () => {
 
     await expect(
       service.run([{ role: 'user', content: 'device?' }], context),
-    ).resolves.toEqual({ answer: 'offline', keyPoints: ['device 1'] });
+    ).resolves.toEqual({
+      answer: 'offline\n\nDevice 1',
+      keyPoints: ['device 1'],
+    });
 
     expect(agentSteps.createRunning).toHaveBeenCalledWith(
       context,
@@ -100,22 +104,16 @@ describe('AgentService', () => {
     expect(tool.execute).toHaveBeenCalledWith({ deviceId: 1 }, context);
     expect(aiProvider.generateWithTools).toHaveBeenCalledTimes(1);
     expect(aiProvider.streamFinalAnswer).toHaveBeenCalledTimes(1);
-    expect(events.publish).toHaveBeenNthCalledWith(
-      1,
+    expect(events.publish).toHaveBeenCalledTimes(1);
+    expect(events.publish).toHaveBeenCalledWith(
       'task-1',
       'answer.delta',
-      { delta: '{"answer":"off' },
-    );
-    expect(events.publish).toHaveBeenNthCalledWith(
-      2,
-      'task-1',
-      'answer.delta',
-      { delta: 'line","keyPoints":["device 1"]}' },
+      { delta: 'offline\n\nDevice 1' },
     );
     expect(agentSteps.completeTask).toHaveBeenCalledWith(
       'final',
       context,
-      '{"answer":"offline","keyPoints":["device 1"]}',
+      '{"answer":"offline\\n\\nDevice 1","keyPoints":["device 1"]}',
     );
   });
 
