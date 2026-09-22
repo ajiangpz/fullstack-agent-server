@@ -3,6 +3,10 @@ export const en = {
   'language.chinese': '中文',
   'language.switchToEnglish': 'Switch to English',
   'language.switchToChinese': '切换到中文',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
+  'theme.switchToLight': 'Switch to light mode',
+  'theme.switchToDark': 'Switch to dark mode',
 
   'common.loading': 'Loading…',
   'common.reset': 'Reset',
@@ -305,6 +309,9 @@ export const en = {
   'settings.language.title': 'Language',
   'settings.language.description':
     'Choose the display language for this browser. The preference is stored locally and does not change API data.',
+  'settings.theme.title': 'Theme mode',
+  'settings.theme.description':
+    'Switch between light and dark mode. The preference is stored locally in this browser.',
 
   'conversation.new': 'New conversation',
   'conversation.empty': 'Start a conversation with the Network Agent.',

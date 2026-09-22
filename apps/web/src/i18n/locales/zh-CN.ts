@@ -5,6 +5,10 @@ export const zhCN = {
   'language.chinese': '中文',
   'language.switchToEnglish': '切换到英文',
   'language.switchToChinese': '切换到中文',
+  'theme.light': '白天模式',
+  'theme.dark': '暗夜模式',
+  'theme.switchToLight': '切换到白天模式',
+  'theme.switchToDark': '切换到暗夜模式',
 
   'common.loading': '加载中…',
   'common.reset': '重置',
@@ -287,6 +291,9 @@ export const zhCN = {
   'settings.language.title': '语言',
   'settings.language.description':
     '选择此浏览器的显示语言。偏好保存在本地，不会修改 API 数据。',
+  'settings.theme.title': '主题模式',
+  'settings.theme.description':
+    '在白天模式和暗夜模式之间切换。偏好会保存在当前浏览器中。',
 
   'conversation.new': '新建会话',
   'conversation.empty': '向 Network Agent 发送第一条消息。',

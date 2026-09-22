@@ -1,6 +1,7 @@
 'use client';
 
 import { LanguageSwitcher } from '@/components/language-switcher';
+import { ThemeSwitcher } from '@/components/theme-switcher';
 import { Card } from '@/components/ui/card';
 import { useTranslation } from '@/i18n/use-translation';
 
@@ -28,6 +29,18 @@ export default function SettingsPage() {
           </p>
         </div>
         <LanguageSwitcher />
+      </Card>
+
+      <Card className="mt-4 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-medium text-zinc-100">
+            {t('settings.theme.title')}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
+            {t('settings.theme.description')}
+          </p>
+        </div>
+        <ThemeSwitcher />
       </Card>
     </div>
   );
