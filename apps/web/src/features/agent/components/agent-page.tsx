@@ -3,8 +3,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   ArrowRight,
-  Bot,
-  Clock3,
   LoaderCircle,
   MessageSquarePlus,
   Radio,
@@ -14,10 +12,9 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { useTranslation } from '@/i18n/use-translation';
 import type { TranslationKey } from '@/i18n/types';
 import { translateValidationMessage } from '@/i18n/validation';
@@ -40,6 +37,13 @@ const suggestionKeys: TranslationKey[] = [
   'agent.suggestion.summary',
   'agent.suggestion.byName',
 ];
+
+function resizeComposer(element: HTMLTextAreaElement | null) {
+  if (!element) return;
+
+  element.style.height = '0px';
+  element.style.height = `${Math.min(element.scrollHeight, 176)}px`;
+}
 
 export function createTemporaryAssistantMessage({
   taskId,
@@ -91,6 +95,12 @@ export function AgentPage() {
 
   const [taskId, setTaskId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+
   const createConversationMutation = useCreateConversation();
   const createTaskMutation = useCreateAiTask();
   const conversationQuery = useConversation(
@@ -109,6 +119,7 @@ export function AgentPage() {
     resolver: zodResolver(agentPromptSchema),
     defaultValues: { prompt: '' },
   });
+  const promptRegistration = register('prompt');
 
   useEffect(() => {
     hydrateConversation();
@@ -131,8 +142,30 @@ export function AgentPage() {
     conversationBusy ||
     taskActive;
 
+  const messages = conversationQuery.data?.messages ?? [];
+  const temporaryMessage = createTemporaryAssistantMessage({
+    taskId,
+    taskStatus: task?.status,
+    streamedAnswer: taskQuery.streamedAnswer,
+    messages,
+    createdAt: task?.createdAt,
+  });
+
+  useEffect(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport || !shouldAutoScrollRef.current) return;
+
+    const frame = requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight;
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [messages.length, temporaryMessage?.content, task?.status]);
+
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
+    setSuggestionsOpen(false);
+    shouldAutoScrollRef.current = true;
 
     try {
       let conversationId = activeConversationId;
@@ -148,6 +181,7 @@ export function AgentPage() {
       );
       setTaskId(created.taskId);
       reset({ prompt: '' });
+      requestAnimationFrame(() => resizeComposer(textareaRef.current));
       await queryClient.invalidateQueries({
         queryKey: ['conversation', conversationId],
       });
@@ -166,102 +200,117 @@ export function AgentPage() {
     clearActiveConversation();
     setTaskId(null);
     setSubmitError(null);
+    setSuggestionsOpen(false);
     reset({ prompt: '' });
+    shouldAutoScrollRef.current = true;
+    requestAnimationFrame(() => {
+      resizeComposer(textareaRef.current);
+      textareaRef.current?.focus();
+    });
   }
 
-  const messages = conversationQuery.data?.messages ?? [];
-  const temporaryMessage = createTemporaryAssistantMessage({
-    taskId,
-    taskStatus: task?.status,
-    streamedAnswer: taskQuery.streamedAnswer,
-    messages,
-    createdAt: task?.createdAt,
-  });
+  function chooseSuggestion(prompt: string) {
+    setValue('prompt', prompt, { shouldValidate: true });
+    requestAnimationFrame(() => {
+      resizeComposer(textareaRef.current);
+      textareaRef.current?.focus();
+    });
+  }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm text-cyan-400">{t('agent.section')}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            {t('agent.title')}
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-            {t('agent.description')}
+    <div className="mx-auto flex h-[calc(100dvh-8rem)] min-h-[34rem] w-full max-w-5xl flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-900 pb-4">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
+            {t('agent.section')}
           </p>
+          <div className="mt-1 flex items-baseline gap-3">
+            <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-100 sm:text-2xl">
+              {t('agent.title')}
+            </h1>
+            <p className="hidden truncate text-sm text-zinc-600 md:block">
+              {t('agent.description')}
+            </p>
+          </div>
         </div>
         <Button
           type="button"
-          variant="secondary"
+          variant="ghost"
+          size="sm"
           disabled={isBusy}
           onClick={startNewConversation}
+          className="shrink-0"
         >
           <MessageSquarePlus className="mr-2 h-4 w-4" />
           {t('conversation.new')}
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-        <div className="space-y-4">
-          <Card className="min-h-[360px] overflow-hidden">
-            {activeConversationId && conversationQuery.isLoading ? (
-              <div className="flex items-center justify-center gap-3 px-5 py-16 text-sm text-zinc-500">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-                {t('conversation.loading')}
-              </div>
-            ) : null}
+      <div
+        ref={messagesViewportRef}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          const distanceFromBottom =
+            element.scrollHeight - element.scrollTop - element.clientHeight;
+          shouldAutoScrollRef.current = distanceFromBottom < 120;
+        }}
+      >
+        {activeConversationId && conversationQuery.isLoading ? (
+          <div className="flex min-h-72 items-center justify-center gap-3 px-5 py-16 text-sm text-zinc-500">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            {t('conversation.loading')}
+          </div>
+        ) : null}
 
-            {activeConversationId && conversationQuery.isError ? (
-              <div className="px-5 py-12 text-center text-sm text-red-300">
-                {conversationQuery.error instanceof Error
-                  ? conversationQuery.error.message
-                  : t('conversation.restoreError')}
-              </div>
-            ) : null}
+        {activeConversationId && conversationQuery.isError ? (
+          <div className="flex min-h-72 items-center justify-center px-5 py-16 text-center text-sm text-red-300">
+            {conversationQuery.error instanceof Error
+              ? conversationQuery.error.message
+              : t('conversation.restoreError')}
+          </div>
+        ) : null}
 
-            {!conversationQuery.isLoading && !conversationQuery.isError ? (
-              <ConversationMessageList
-                messages={messages}
-                temporaryMessage={temporaryMessage}
-              />
-            ) : null}
+        {!conversationQuery.isLoading && !conversationQuery.isError ? (
+          <ConversationMessageList
+            messages={messages}
+            temporaryMessage={temporaryMessage}
+          />
+        ) : null}
 
-            {taskActive ? (
-              <div className="border-t border-zinc-800 px-5 py-4 text-sm text-cyan-200">
-                <div className="flex items-center gap-3">
-                  {taskQuery.streamStatus === 'connected' ? (
-                    <Radio className="h-4 w-4" />
-                  ) : (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  )}
-                  {taskQuery.streamStatus === 'connected'
-                    ? t('agent.live.connected')
-                    : t('agent.live.fallback')}
-                </div>
-              </div>
-            ) : null}
-          </Card>
-
-          {task ? (
-            <Card className="p-4" aria-live="polite">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {task ? (
+          <div className="mx-auto mb-8 w-full max-w-3xl px-1 sm:px-4">
+            <div
+              className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
+              aria-live="polite"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <TaskStatusBadge status={task.status} />
-                  <span className="font-mono text-xs text-zinc-600">
-                    {task.id}
-                  </span>
+                  {taskActive ? (
+                    <span className="inline-flex items-center gap-2 text-xs text-zinc-500">
+                      {taskQuery.streamStatus === 'connected' ? (
+                        <Radio className="h-3.5 w-3.5 text-cyan-400" />
+                      ) : (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      )}
+                      {taskQuery.streamStatus === 'connected'
+                        ? t('agent.live.connected')
+                        : t('agent.live.fallback')}
+                    </span>
+                  ) : null}
                 </div>
                 <Link
                   href={`/tasks/${encodeURIComponent(task.id)}`}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-cyan-300 transition hover:text-cyan-200"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400 transition hover:text-cyan-300"
                 >
                   {t('agent.trace.view')}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
 
               {task.status === 'FAILED' ? (
-                <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-200">
+                <div className="mt-3 flex items-start gap-3 border-t border-zinc-800 pt-3 text-sm text-red-300">
                   <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                   <div>
                     <p className="font-medium">{t('conversation.failed')}</p>
@@ -271,94 +320,115 @@ export function AgentPage() {
                   </div>
                 </div>
               ) : null}
-            </Card>
-          ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-          <Card className="p-5">
+      <div className="relative z-10 shrink-0 border-t border-zinc-900 bg-zinc-950 pt-4">
+        <div className="mx-auto w-full max-w-4xl">
+          <div
+            className="relative"
+            onFocusCapture={() => {
+              if (!isBusy) setSuggestionsOpen(true);
+            }}
+            onBlurCapture={(event) => {
+              const nextTarget = event.relatedTarget as Node | null;
+              if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+                setSuggestionsOpen(false);
+              }
+            }}
+          >
+            {suggestionsOpen && !isBusy ? (
+              <div className="absolute bottom-[calc(100%+0.75rem)] left-0 right-0 z-20 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur">
+                <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-500">
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                  {t('agent.suggestions')}
+                </div>
+                <div className="grid gap-1 sm:grid-cols-2">
+                  {suggestionKeys.map((key) => {
+                    const prompt = t(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className="rounded-xl px-3 py-2.5 text-left text-sm leading-5 text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+                        onClick={() => chooseSuggestion(prompt)}
+                      >
+                        {prompt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
             <form
-              className="space-y-4"
+              ref={formRef}
+              className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-2 shadow-[0_-10px_40px_rgba(0,0,0,0.18)] transition focus-within:border-zinc-700 focus-within:bg-zinc-900"
               onSubmit={(event) => {
                 void onSubmit(event);
               }}
             >
-              <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
-                <Bot className="h-4 w-4 text-cyan-400" />
-                {t('agent.ask')}
-              </div>
-              <textarea
-                className="min-h-28 w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
-                placeholder={t('agent.placeholder')}
-                disabled={isBusy}
-                {...register('prompt')}
-              />
-              {errors.prompt ? (
-                <p className="text-sm text-red-400">
-                  {translateValidationMessage(errors.prompt.message, t)}
-                </p>
-              ) : null}
-              {isBusy ? (
-                <p className="text-sm text-zinc-500">
-                  {t('conversation.busy')}
-                </p>
-              ) : null}
-              {submitError ? (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                  {submitError}
-                </div>
-              ) : null}
-              <div className="flex justify-end">
-                <Button type="submit" disabled={isBusy}>
+              <div className="flex items-end gap-2">
+                <textarea
+                  rows={1}
+                  className="max-h-44 min-h-[44px] flex-1 resize-none overflow-y-auto bg-transparent px-3 py-2.5 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder={t('agent.placeholder')}
+                  disabled={isBusy}
+                  {...promptRegistration}
+                  ref={(element) => {
+                    promptRegistration.ref(element);
+                    textareaRef.current = element;
+                  }}
+                  onInput={(event) => resizeComposer(event.currentTarget)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === 'Enter' &&
+                      !event.shiftKey &&
+                      !event.nativeEvent.isComposing
+                    ) {
+                      event.preventDefault();
+                      formRef.current?.requestSubmit();
+                    }
+                  }}
+                />
+                <Button
+                  type="submit"
+                  disabled={isBusy}
+                  aria-label={t('conversation.send')}
+                  title={t('conversation.send')}
+                  className="h-10 w-10 shrink-0 rounded-full p-0"
+                >
                   {createConversationMutation.isPending ||
-                  createTaskMutation.isPending ? (
-                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  createTaskMutation.isPending ||
+                  taskActive ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Send className="mr-2 h-4 w-4" />
+                    <Send className="h-4 w-4" />
                   )}
-                  {t('conversation.send')}
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+          </div>
 
-        <div className="space-y-4">
-          <Card className="p-5">
-            <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
-              <Sparkles className="h-4 w-4 text-cyan-400" />
-              {t('agent.suggestions')}
-            </div>
-            <div className="mt-4 space-y-2">
-              {suggestionKeys.map((key) => {
-                const prompt = t(key);
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={isBusy}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-left text-sm leading-5 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={() =>
-                      setValue('prompt', prompt, { shouldValidate: true })
-                    }
-                  >
-                    {prompt}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
+          {errors.prompt ? (
+            <p className="mt-2 px-3 text-xs text-red-400">
+              {translateValidationMessage(errors.prompt.message, t)}
+            </p>
+          ) : null}
 
-          <Card className="p-5">
-            <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
-              <Clock3 className="h-4 w-4 text-cyan-400" />
-              {t('agent.observable.title')}
+          {submitError ? (
+            <div className="mt-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {submitError}
             </div>
-            <p className="mt-3 text-sm leading-6 text-zinc-500">
-              {t('agent.observable.description1')}
+          ) : null}
+
+          {isBusy && !submitError ? (
+            <p className="mt-2 px-3 text-xs text-zinc-600">
+              {t('conversation.busy')}
             </p>
-            <p className="mt-3 text-sm leading-6 text-zinc-500">
-              {t('agent.observable.description2')}
-            </p>
-          </Card>
+          ) : null}
         </div>
       </div>
     </div>
