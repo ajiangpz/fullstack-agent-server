@@ -151,6 +151,8 @@ export function AgentPage() {
     createdAt: task?.createdAt,
   });
 
+  const hasConversation = messages.length > 0 || Boolean(temporaryMessage);
+
   useEffect(() => {
     const viewport = messagesViewportRef.current;
     if (!viewport || !shouldAutoScrollRef.current) return;
@@ -271,7 +273,43 @@ export function AgentPage() {
           </div>
         ) : null}
 
-        {!conversationQuery.isLoading && !conversationQuery.isError ? (
+        {!conversationQuery.isLoading &&
+        !conversationQuery.isError &&
+        !hasConversation ? (
+          <div className="flex min-h-full items-center justify-center px-4 py-10">
+            <div className="w-full max-w-2xl -translate-y-6 text-center sm:-translate-y-10">
+              <h2 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
+                {t('agent.welcome.title')}
+              </h2>
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-zinc-500">
+                {t('agent.welcome.description')}
+              </p>
+
+              <div className="mt-8 grid gap-3 text-left sm:grid-cols-2">
+                {suggestionKeys.map((key) => {
+                  const prompt = t(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className="group rounded-2xl border border-zinc-800/80 bg-zinc-900/25 px-4 py-4 text-sm leading-6 text-zinc-300 transition hover:border-zinc-700 hover:bg-zinc-900/70 hover:text-zinc-100"
+                      onClick={() => chooseSuggestion(prompt)}
+                    >
+                      <span className="block">{prompt}</span>
+                      <span className="mt-2 block text-xs text-zinc-600 transition group-hover:text-zinc-500">
+                        {t('agent.suggestions')}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {!conversationQuery.isLoading &&
+        !conversationQuery.isError &&
+        hasConversation ? (
           <ConversationMessageList
             messages={messages}
             temporaryMessage={temporaryMessage}
@@ -330,7 +368,7 @@ export function AgentPage() {
           <div
             className="relative"
             onFocusCapture={() => {
-              if (!isBusy) setSuggestionsOpen(true);
+              if (!isBusy && hasConversation) setSuggestionsOpen(true);
             }}
             onBlurCapture={(event) => {
               const nextTarget = event.relatedTarget as Node | null;
@@ -339,7 +377,7 @@ export function AgentPage() {
               }
             }}
           >
-            {suggestionsOpen && !isBusy ? (
+            {suggestionsOpen && !isBusy && hasConversation ? (
               <div className="absolute bottom-[calc(100%+0.75rem)] left-0 right-0 z-20 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur">
                 <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-500">
                   <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
