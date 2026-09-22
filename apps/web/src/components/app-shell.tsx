@@ -77,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="text-xs text-zinc-500">{t('shell.header.subtitle')}</p>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeSwitcher />
+            <ThemeSwitcher compact />
             <LanguageSwitcher />
             <div className="hidden text-right sm:block">
               <p className="text-sm text-zinc-200">
