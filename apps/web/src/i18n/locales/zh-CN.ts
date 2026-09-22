@@ -165,6 +165,9 @@ export const zhCN = {
   'agent.title': 'Network Agent',
   'agent.description':
     '向 Agent 询问当前账号可访问的设备。后端 Agent 会自行判断何时调用网络设备工具，并返回结构化结果。',
+  'agent.welcome.title': '今天想查看什么？',
+  'agent.welcome.description':
+    '可以查询设备状态、筛选离线设备、按端口数量过滤，或按名称查看设备详情。',
   'agent.ask': '向网络 Agent 提问',
   'agent.placeholder': '哪些设备当前离线？',
   'agent.run': '运行任务',
