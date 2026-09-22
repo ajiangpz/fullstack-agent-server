@@ -28,7 +28,7 @@ export function ConversationMessageList({
   }
 
   return (
-    <div className="mr-auto w-full max-w-5xl space-y-7 px-1 pb-8 pt-5 sm:px-0">
+    <div className="mx-auto w-full max-w-5xl space-y-7 px-1 pb-8 pt-5 sm:px-0">
       {rendered.map((message) => {
         const isUser = message.role === 'USER';
         const hasContent = message.content.trim().length > 0;
@@ -47,7 +47,7 @@ export function ConversationMessageList({
         return (
           <article
             key={message.id}
-            className="mr-auto flex w-full max-w-4xl gap-3 text-zinc-200"
+            className="flex w-full gap-3 text-zinc-200"
           >
             <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-[10px] font-semibold text-cyan-300">
               AI
