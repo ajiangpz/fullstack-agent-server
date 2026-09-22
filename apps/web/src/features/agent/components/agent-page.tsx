@@ -296,9 +296,6 @@ export function AgentPage() {
                       onClick={() => chooseSuggestion(prompt)}
                     >
                       <span className="block">{prompt}</span>
-                      <span className="mt-2 block text-xs text-zinc-600 transition group-hover:text-zinc-500">
-                        {t('agent.suggestions')}
-                      </span>
                     </button>
                   );
                 })}
