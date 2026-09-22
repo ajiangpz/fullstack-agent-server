@@ -17,7 +17,7 @@ function safeHref(href: string): string | null {
 
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   const tokens = text.split(
-    /(\*\*[^*\n]+\*\*|\`[^\`\n]+\`|\[[^\]\n]+\]\([^)]+\))/g,
+    /(\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\([^)]+\))/g,
   );
 
   return tokens.map((token, index) => {
@@ -68,7 +68,7 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
 
 function isBlockStart(line: string) {
   return (
-    /^\`\`\`/.test(line) ||
+    /^```(?:[\w-]+)?\s*$/.test(line) ||
     /^#{1,3}\s+/.test(line) ||
     /^\s*[-*]\s+/.test(line) ||
     /^\s*\d+\.\s+/.test(line) ||
@@ -89,13 +89,13 @@ export function MarkdownMessage({ content }: { content: string }) {
       continue;
     }
 
-    const fenceMatch = line.match(/^\`\`\`([\w-]+)?\s*$/);
+    const fenceMatch = line.match(/^```([\w-]+)?\s*$/);
     if (fenceMatch) {
       const language = fenceMatch[1];
       const codeLines: string[] = [];
       index += 1;
 
-      while (index < lines.length && !/^\`\`\`\s*$/.test(lines[index])) {
+      while (index < lines.length && !/^```\s*$/.test(lines[index])) {
         codeLines.push(lines[index]);
         index += 1;
       }
