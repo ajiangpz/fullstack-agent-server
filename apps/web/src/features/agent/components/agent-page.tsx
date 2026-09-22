@@ -220,7 +220,7 @@ export function AgentPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-900 pb-4">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
@@ -314,7 +314,7 @@ export function AgentPage() {
         ) : null}
 
         {task ? (
-          <div className="mr-auto mb-8 w-full max-w-4xl px-1 sm:px-0">
+          <div className="mx-auto mb-8 w-full max-w-5xl px-1 sm:px-0">
             <div
               className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
               aria-live="polite"
@@ -361,7 +361,7 @@ export function AgentPage() {
       </div>
 
       <div className="relative z-10 shrink-0 border-t border-zinc-900 bg-zinc-950 pt-4">
-        <div className="mr-auto w-full max-w-5xl">
+        <div className="mx-auto w-full max-w-5xl">
           <div
             className="relative"
             onFocusCapture={() => {
