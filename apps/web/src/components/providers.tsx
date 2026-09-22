@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
+import { ThemeDocumentSync } from '@/components/theme-document-sync';
 import { LanguageDocumentSync } from '@/i18n/language-document-sync';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -19,6 +20,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeDocumentSync />
       <LanguageDocumentSync />
       {children}
     </QueryClientProvider>
