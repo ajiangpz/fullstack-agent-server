@@ -71,8 +71,7 @@ export function DevicesPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-cyan-400">{t('devices.section')}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {t('devices.title')}
           </h1>
           <p className="mt-2 text-sm text-zinc-500">

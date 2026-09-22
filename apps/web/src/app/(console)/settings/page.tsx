@@ -10,8 +10,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <p className="text-sm text-cyan-400">{t('settings.section')}</p>
-      <h1 className="mt-1 text-3xl font-semibold">{t('settings.title')}</h1>
+      <h1 className="text-3xl font-semibold">{t('settings.title')}</h1>
       <p className="mt-2 text-sm text-zinc-500">{t('settings.description')}</p>
 
       <Card className="mt-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">

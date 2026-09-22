@@ -222,10 +222,7 @@ export function AgentPage() {
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col overflow-hidden">
       <div className="shrink-0 border-b border-zinc-900 pb-4">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
-          {t('agent.section')}
-        </p>
-        <div className="mt-1 flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-100 sm:text-2xl">
             {t('agent.title')}
           </h1>

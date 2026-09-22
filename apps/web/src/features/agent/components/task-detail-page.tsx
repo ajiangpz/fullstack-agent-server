@@ -53,8 +53,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm text-cyan-400">{t('task.detail.section')}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {t('task.detail.title')}
           </h1>
           <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-zinc-400">
