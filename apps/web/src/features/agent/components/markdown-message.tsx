@@ -66,6 +66,37 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   });
 }
 
+
+function parseTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  const withoutLeadingPipe = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
+  const withoutOuterPipes = withoutLeadingPipe.endsWith('|')
+    ? withoutLeadingPipe.slice(0, -1)
+    : withoutLeadingPipe;
+
+  return withoutOuterPipes.split('|').map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = parseTableRow(line);
+
+  return (
+    cells.length >= 2 &&
+    cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')))
+  );
+}
+
+function isTableStart(lines: string[], index: number): boolean {
+  if (index + 1 >= lines.length) return false;
+
+  const headerCells = parseTableRow(lines[index]);
+  return (
+    lines[index].includes('|') &&
+    headerCells.length >= 2 &&
+    isTableSeparator(lines[index + 1])
+  );
+}
+
 function isBlockStart(line: string) {
   return (
     /^```(?:[\w-]+)?\s*$/.test(line) ||
@@ -114,6 +145,83 @@ export function MarkdownMessage({ content }: { content: string }) {
           <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-6 text-zinc-200">
             <code>{codeLines.join('\n')}</code>
           </pre>
+        </div>,
+      );
+      continue;
+    }
+
+
+    if (isTableStart(lines, index)) {
+      const headerCells = parseTableRow(lines[index]);
+      const tableStartIndex = index;
+      index += 2;
+
+      const rows: string[][] = [];
+      while (
+        index < lines.length &&
+        lines[index].trim() !== '' &&
+        lines[index].includes('|')
+      ) {
+        const row = parseTableRow(lines[index]);
+        if (row.length < 2) break;
+        rows.push(row);
+        index += 1;
+      }
+
+      blocks.push(
+        <div
+          key={'table-' + tableStartIndex}
+          className="overflow-x-auto rounded-xl border border-zinc-800"
+        >
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <thead className="bg-zinc-900/80 text-zinc-200">
+              <tr>
+                {headerCells.map((cell, cellIndex) => (
+                  <th
+                    key={'table-' + tableStartIndex + '-head-' + cellIndex}
+                    className="border-b border-zinc-800 px-4 py-2.5 font-medium"
+                  >
+                    {renderInlineMarkdown(
+                      cell,
+                      'table-' + tableStartIndex + '-head-' + cellIndex,
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-900">
+              {rows.map((row, rowIndex) => (
+                <tr
+                  key={'table-' + tableStartIndex + '-row-' + rowIndex}
+                  className="bg-zinc-950/30 transition hover:bg-zinc-900/40"
+                >
+                  {headerCells.map((_, cellIndex) => (
+                    <td
+                      key={
+                        'table-' +
+                        tableStartIndex +
+                        '-row-' +
+                        rowIndex +
+                        '-cell-' +
+                        cellIndex
+                      }
+                      className="px-4 py-2.5 align-top text-zinc-300"
+                    >
+                      {renderInlineMarkdown(
+                        row[cellIndex] ?? '',
+                        'table-' +
+                          tableStartIndex +
+                          '-row-' +
+                          rowIndex +
+                          '-cell-' +
+                          cellIndex,
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>,
       );
       continue;
@@ -223,7 +331,8 @@ export function MarkdownMessage({ content }: { content: string }) {
     while (
       index < lines.length &&
       lines[index].trim() !== '' &&
-      !isBlockStart(lines[index])
+      !isBlockStart(lines[index]) &&
+      !isTableStart(lines, index)
     ) {
       paragraphLines.push(lines[index]);
       index += 1;
