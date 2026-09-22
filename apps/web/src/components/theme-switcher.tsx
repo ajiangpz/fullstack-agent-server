@@ -13,7 +13,7 @@ const labelKeys: Record<ThemeSkin, TranslationKey> = {
   emerald: 'theme.emerald',
 };
 
-export function ThemeSwitcher() {
+export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
   const skin = useThemeStore((state) => state.skin);
   const cycleSkin = useThemeStore((state) => state.cycleSkin);
   const { t } = useTranslation();
@@ -29,8 +29,8 @@ export function ThemeSwitcher() {
       aria-label={accessibleLabel}
       title={accessibleLabel}
     >
-      <Palette className="mr-1.5 h-4 w-4" />
-      {label}
+      <Palette className={compact ? 'h-4 w-4' : 'mr-1.5 h-4 w-4'} />
+      {compact ? null : label}
     </Button>
   );
 }
