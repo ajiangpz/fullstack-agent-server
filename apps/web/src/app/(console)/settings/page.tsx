@@ -15,7 +15,7 @@ export default function SettingsPage() {
       <p className="mt-2 text-sm text-zinc-500">{t('settings.description')}</p>
 
       <div className="mt-6 space-y-4">
-      <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-medium text-zinc-100">
             {t('settings.language.title')}
@@ -30,9 +30,9 @@ export default function SettingsPage() {
           </p>
         </div>
         <LanguageSwitcher />
-      </Card>
+        </Card>
 
-      <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-medium text-zinc-100">
             {t('settings.theme.title')}
@@ -42,7 +42,7 @@ export default function SettingsPage() {
           </p>
         </div>
         <ThemeSwitcher />
-      </Card>
+        </Card>
       </div>
     </div>
   );
