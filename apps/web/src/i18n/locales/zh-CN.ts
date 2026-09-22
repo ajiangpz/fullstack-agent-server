@@ -5,6 +5,11 @@ export const zhCN = {
   'language.chinese': '中文',
   'language.switchToEnglish': '切换到英文',
   'language.switchToChinese': '切换到中文',
+  'theme.switch': '切换主题配色',
+  'theme.cyan': '青色',
+  'theme.blue': '蓝色',
+  'theme.violet': '紫色',
+  'theme.emerald': '翠绿色',
 
   'common.loading': '加载中…',
   'common.reset': '重置',
@@ -287,6 +292,9 @@ export const zhCN = {
   'settings.language.title': '语言',
   'settings.language.description':
     '选择此浏览器的显示语言。偏好保存在本地，不会修改 API 数据。',
+  'settings.theme.title': '主题配色',
+  'settings.theme.description':
+    '选择此浏览器使用的控制台强调色皮肤。偏好保存在本地，不会修改 API 数据。',
 
   'conversation.new': '新建会话',
   'conversation.empty': '向 Network Agent 发送第一条消息。',
