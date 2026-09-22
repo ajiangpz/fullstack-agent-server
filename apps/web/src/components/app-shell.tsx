@@ -12,6 +12,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LanguageSwitcher } from '@/components/language-switcher';
+import { ThemeSwitcher } from '@/components/theme-switcher';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n/use-translation';
 import { useAuthStore } from '@/lib/auth-store';
@@ -76,6 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="text-xs text-zinc-500">{t('shell.header.subtitle')}</p>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeSwitcher />
             <LanguageSwitcher />
             <div className="hidden text-right sm:block">
               <p className="text-sm text-zinc-200">
