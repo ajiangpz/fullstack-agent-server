@@ -9,6 +9,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { DevicesModule } from './devices/devices.module';
 import { DomainEventsModule } from './events/domain-events.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { TopologyModule } from './topology/topology.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AuditModule,
     ConversationsModule,
     AiTasksModule,
+    TopologyModule,
   ],
   controllers: [AppController],
   providers: [AppService],
