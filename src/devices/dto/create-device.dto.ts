@@ -3,12 +3,13 @@ import {
   IsInt,
   IsIP,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export const DEVICE_STATUSES = ['online', 'offline'] as const;
 
@@ -48,4 +49,14 @@ export class CreateDeviceDto {
   })
   @IsIn(DEVICE_STATUSES)
   status!: DeviceStatus;
+
+  @ApiPropertyOptional({
+    example: 'cm123site',
+    description: '所属站点 ID；省略时使用当前用户的 Default Site',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  siteId?: string;
 }

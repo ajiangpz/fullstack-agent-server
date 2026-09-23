@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DEFAULT_SITE_NAME } from '../topology/topology.constants';
 
 export type PublicUser = Omit<User, 'passwordHash'>;
 
@@ -76,7 +77,14 @@ export class UsersService {
   async create(data: Prisma.UserCreateInput): Promise<PublicUser> {
     try {
       return await this.prisma.user.create({
-        data,
+        data: {
+          ...data,
+          sites: {
+            create: {
+              name: DEFAULT_SITE_NAME,
+            },
+          },
+        },
         select: {
           id: true,
           username: true,

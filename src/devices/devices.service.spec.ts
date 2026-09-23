@@ -5,12 +5,11 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '../generated/prisma/client';
-import { UserRole } from '../generated/prisma/enums';
+import { AuditAction, UserRole } from '../generated/prisma/enums';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { DevicesService } from './devices.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { AuditAction } from '../generated/prisma/enums';
 import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
 
 describe('DevicesService', () => {
@@ -24,6 +23,10 @@ describe('DevicesService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    networkSite: {
+      findFirst: jest.Mock;
+      upsert: jest.Mock;
+    };
   };
   let eventEmitter: { emit: jest.Mock };
 
@@ -33,7 +36,17 @@ describe('DevicesService', () => {
     ip: '192.168.1.10',
     portCount: 8,
     status: 'online',
+    type: 'SWITCH',
+    macAddress: null,
+    serialNumber: null,
+    vendor: null,
+    model: null,
+    lastSeenAt: null,
+    metadata: null,
     ownerId: 2,
+    siteId: 'site-2',
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 
   const user: AuthenticatedUser = {
@@ -66,6 +79,10 @@ describe('DevicesService', () => {
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
+      },
+      networkSite: {
+        findFirst: jest.fn(),
+        upsert: jest.fn().mockResolvedValue({ id: 'site-2' }),
       },
     };
     eventEmitter = {
@@ -110,6 +127,7 @@ describe('DevicesService', () => {
       expect(prisma.device.findMany).toHaveBeenCalledWith({
         where: {
           ownerId: user.id,
+          siteId: undefined,
           status: undefined,
           portCount: undefined,
           OR: undefined,
@@ -120,7 +138,7 @@ describe('DevicesService', () => {
       });
     });
 
-    it('should apply search, status and port count filters', async () => {
+    it('should apply search, status, site and port count filters', async () => {
       prisma.device.findMany.mockResolvedValue([device]);
       prisma.device.count.mockResolvedValue(11);
 
@@ -129,6 +147,7 @@ describe('DevicesService', () => {
         limit: 10,
         search: '192.168.1.10',
         status: 'online',
+        siteId: 'site-2',
         minPortCount: 4,
         maxPortCount: 48,
       });
@@ -136,6 +155,7 @@ describe('DevicesService', () => {
       expect(prisma.device.findMany).toHaveBeenCalledWith({
         where: {
           ownerId: user.id,
+          siteId: 'site-2',
           status: 'online',
           portCount: { gte: 4, lte: 48 },
           OR: [
@@ -168,6 +188,7 @@ describe('DevicesService', () => {
 
       expect(prisma.device.findMany).toHaveBeenCalledWith({
         where: {
+          siteId: undefined,
           status: undefined,
           portCount: undefined,
           OR: undefined,
@@ -227,15 +248,30 @@ describe('DevicesService', () => {
       status: 'online' as const,
     };
 
-    it('should create a device in the database', async () => {
-      const createdDevice = { id: 3, ...dto };
+    it('should create a device in the default site', async () => {
+      const createdDevice = { ...device, id: 3, ...dto };
       prisma.device.create.mockResolvedValue(createdDevice);
 
       await expect(service.create(dto, user)).resolves.toEqual(createdDevice);
+      expect(prisma.networkSite.upsert).toHaveBeenCalledWith({
+        where: {
+          ownerId_name: {
+            ownerId: user.id,
+            name: 'Default Site',
+          },
+        },
+        create: {
+          ownerId: user.id,
+          name: 'Default Site',
+        },
+        update: {},
+        select: { id: true },
+      });
       expect(prisma.device.create).toHaveBeenCalledWith({
         data: {
           ...dto,
-          owner: { connect: { id: user.id } },
+          ownerId: user.id,
+          siteId: 'site-2',
         },
       });
       expect(eventEmitter.emit).toHaveBeenCalledWith(
@@ -248,14 +284,46 @@ describe('DevicesService', () => {
           metadata: {
             name: createdDevice.name,
             ip: createdDevice.ip,
+            siteId: createdDevice.siteId,
           },
         }),
       );
     });
 
-    it('should reject a duplicate device name', async () => {
+    it('should create a device only in a site owned by the caller', async () => {
+      prisma.networkSite.findFirst.mockResolvedValue({ id: 'custom-site' });
+      prisma.device.create.mockResolvedValue({
+        ...device,
+        siteId: 'custom-site',
+      });
+
+      await service.create({ ...dto, siteId: 'custom-site' }, user);
+
+      expect(prisma.networkSite.findFirst).toHaveBeenCalledWith({
+        where: { id: 'custom-site', ownerId: user.id },
+        select: { id: true },
+      });
+      expect(prisma.device.create).toHaveBeenCalledWith({
+        data: {
+          ...dto,
+          ownerId: user.id,
+          siteId: 'custom-site',
+        },
+      });
+    });
+
+    it('should reject a site not owned by the caller', async () => {
+      prisma.networkSite.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create({ ...dto, siteId: 'foreign-site' }, user),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.device.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject a duplicate device name in the same site', async () => {
       prisma.device.create.mockRejectedValue(
-        knownRequestError('P2002', { target: ['name'] }),
+        knownRequestError('P2002', { target: ['siteId', 'name'] }),
       );
 
       await expect(service.create(dto, user)).rejects.toThrow(
@@ -263,9 +331,9 @@ describe('DevicesService', () => {
       );
     });
 
-    it('should reject a duplicate device IP', async () => {
+    it('should reject a duplicate device IP in the same site', async () => {
       prisma.device.create.mockRejectedValue(
-        knownRequestError('P2002', { target: ['ip'] }),
+        knownRequestError('P2002', { target: ['siteId', 'ip'] }),
       );
 
       await expect(service.create(dto, user)).rejects.toThrow(
@@ -297,6 +365,7 @@ describe('DevicesService', () => {
           metadata: {
             name: updatedDevice.name,
             ip: updatedDevice.ip,
+            siteId: updatedDevice.siteId,
             changedFields: ['portCount'],
           },
         }),
@@ -305,7 +374,7 @@ describe('DevicesService', () => {
 
     it('should reject a duplicate device name', async () => {
       prisma.device.update.mockRejectedValue(
-        knownRequestError('P2002', { target: ['name'] }),
+        knownRequestError('P2002', { target: ['siteId', 'name'] }),
       );
 
       await expect(
@@ -340,6 +409,7 @@ describe('DevicesService', () => {
           metadata: {
             name: device.name,
             ip: device.ip,
+            siteId: device.siteId,
           },
         }),
       );

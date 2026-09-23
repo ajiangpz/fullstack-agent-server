@@ -18,6 +18,62 @@ enum DeviceStatus {
   offline
 }
 
+enum DeviceType {
+  GATEWAY
+  ROUTER
+  SWITCH
+  ACCESS_POINT
+  CLIENT
+  SERVER
+  UNKNOWN
+}
+
+enum PortAdminStatus {
+  UP
+  DOWN
+  UNKNOWN
+}
+
+enum PortOperStatus {
+  UP
+  DOWN
+  UNKNOWN
+}
+
+enum PortDuplex {
+  FULL
+  HALF
+  UNKNOWN
+}
+
+enum PoeStatus {
+  POWERED
+  OFF
+  UNSUPPORTED
+  UNKNOWN
+}
+
+enum TopologyLinkType {
+  ETHERNET
+  WIRELESS
+  VPN
+  UNKNOWN
+}
+
+enum TopologyLinkStatus {
+  UP
+  DOWN
+  DEGRADED
+  UNKNOWN
+}
+
+enum DiscoverySource {
+  MANUAL
+  SNMP
+  LLDP
+  CDP
+}
+
 enum UserRole {
   ADMIN
   USER
@@ -158,19 +214,111 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model Device {
-  id        Int          @id @default(autoincrement())
-  name      String       @unique @db.VarChar(100)
-  ip        String       @unique @db.Inet
-  portCount Int
-  status    DeviceStatus @default(offline)
-  ownerId   Int
-  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+model NetworkSite {
+  id               String         @id @default(cuid())
+  name             String         @db.VarChar(100)
+  ownerId          Int
+  owner            User           @relation("UserSites", fields: [ownerId], references: [id], onDelete: Cascade, map: "network_sites_ownerId_fkey")
+  topologyRevision Int            @default(0)
+  devices          Device[]
+  topologyLinks    TopologyLink[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
+  @@unique([ownerId, name])
+  @@unique([id, ownerId])
+  @@index([ownerId, updatedAt])
+  @@map("network_sites")
+}
+
+model Device {
+  id               Int            @id @default(autoincrement())
+  name             String         @db.VarChar(100)
+  ip               String         @db.Inet
+  portCount        Int
+  status           DeviceStatus   @default(offline)
+  type             DeviceType     @default(UNKNOWN)
+  macAddress       String?        @db.VarChar(17)
+  serialNumber     String?        @db.VarChar(100)
+  vendor           String?        @db.VarChar(100)
+  model            String?        @db.VarChar(100)
+  lastSeenAt       DateTime?
+  metadata         Json?
+  ownerId          Int
+  owner            User           @relation("UserDevices", fields: [ownerId], references: [id], onDelete: Cascade, map: "devices_ownerId_fkey")
+  siteId           String
+  site             NetworkSite    @relation(fields: [siteId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "devices_site_owner_fkey")
+  ports            DevicePort[]
+  topologyLinksAsA TopologyLink[] @relation("TopologyLinkADevice")
+  topologyLinksAsZ TopologyLink[] @relation("TopologyLinkZDevice")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([siteId, name])
+  @@unique([siteId, ip])
   @@index([ownerId])
+  @@index([siteId])
+  @@index([siteId, type])
+  @@index([status])
   @@map("devices")
+}
+
+model DevicePort {
+  id               Int             @id @default(autoincrement())
+  deviceId         Int
+  device           Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  ifIndex          Int?
+  name             String          @db.VarChar(100)
+  macAddress       String?         @db.VarChar(17)
+  adminStatus      PortAdminStatus @default(UNKNOWN)
+  operStatus       PortOperStatus  @default(UNKNOWN)
+  speedMbps        Int?
+  duplex           PortDuplex      @default(UNKNOWN)
+  poeStatus        PoeStatus       @default(UNKNOWN)
+  nativeVlanId     Int?
+  lagId            String?         @db.VarChar(100)
+  lastSeenAt       DateTime?
+  topologyLinksAsA TopologyLink[]  @relation("TopologyLinkAPort")
+  topologyLinksAsZ TopologyLink[]  @relation("TopologyLinkZPort")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([deviceId, name])
+  @@unique([deviceId, ifIndex])
+  @@index([deviceId, operStatus])
+  @@map("device_ports")
+}
+
+model TopologyLink {
+  id              String             @id @default(cuid())
+  siteId          String
+  site            NetworkSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  aDeviceId       Int
+  aDevice         Device             @relation("TopologyLinkADevice", fields: [aDeviceId], references: [id], onDelete: Cascade)
+  aPortId         Int?
+  aPort           DevicePort?        @relation("TopologyLinkAPort", fields: [aPortId], references: [id], onDelete: SetNull)
+  zDeviceId       Int
+  zDevice         Device             @relation("TopologyLinkZDevice", fields: [zDeviceId], references: [id], onDelete: Cascade)
+  zPortId         Int?
+  zPort           DevicePort?        @relation("TopologyLinkZPort", fields: [zPortId], references: [id], onDelete: SetNull)
+  canonicalKey    String             @unique @db.VarChar(160)
+  linkType        TopologyLinkType   @default(ETHERNET)
+  discoverySource DiscoverySource    @default(MANUAL)
+  status          TopologyLinkStatus @default(UNKNOWN)
+  speedMbps       Int?
+  confidence      Float              @default(1)
+  firstSeenAt     DateTime           @default(now())
+  lastSeenAt      DateTime           @default(now())
+  expiresAt       DateTime?
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([siteId, status])
+  @@index([aDeviceId])
+  @@index([zDeviceId])
+  @@index([lastSeenAt])
+  @@map("topology_links")
 }
 
 model User {
@@ -182,7 +330,8 @@ model User {
   role          UserRole       @default(USER)
   status        UserStatus     @default(ACTIVE)
   lastLoginAt   DateTime?
-  devices       Device[]
+  devices       Device[]       @relation("UserDevices")
+  sites         NetworkSite[]  @relation("UserSites")
   auditLogs     AuditLog[]
   aiTasks       AiTask[]
   conversations Conversation[]

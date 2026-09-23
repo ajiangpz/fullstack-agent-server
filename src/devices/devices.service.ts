@@ -6,15 +6,15 @@ import {
 } from '@nestjs/common';
 import { isIP } from 'node:net';
 import { Device, Prisma } from '../generated/prisma/client';
-import { UserRole } from '../generated/prisma/enums';
+import { AuditAction, UserRole } from '../generated/prisma/enums';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { QueryDevicesDto } from './dto/query-devices.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { AuditAction } from '../generated/prisma/enums';
 import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
+import { DEFAULT_SITE_NAME } from '../topology/topology.constants';
 
 export interface PaginatedDevices {
   items: Device[];
@@ -37,7 +37,15 @@ export class DevicesService {
     user: AuthenticatedUser,
     query = new QueryDevicesDto(),
   ): Promise<PaginatedDevices> {
-    const { page, limit, search, status, minPortCount, maxPortCount } = query;
+    const {
+      page,
+      limit,
+      search,
+      status,
+      siteId,
+      minPortCount,
+      maxPortCount,
+    } = query;
 
     if (
       minPortCount !== undefined &&
@@ -52,6 +60,7 @@ export class DevicesService {
     const normalizedSearch = search?.trim();
     const where: Prisma.DeviceWhereInput = {
       ...this.getOwnershipFilter(user),
+      siteId,
       status,
       portCount:
         minPortCount !== undefined || maxPortCount !== undefined
@@ -97,18 +106,22 @@ export class DevicesService {
     });
 
     if (!device) {
-      throw new NotFoundException(`Device ${id} not found`);
+      throw new NotFoundException('Device ' + id + ' not found');
     }
 
     return device;
   }
 
   async create(dto: CreateDeviceDto, user: AuthenticatedUser): Promise<Device> {
+    const { siteId, ...deviceData } = dto;
+    const resolvedSiteId = await this.resolveSiteId(user.id, siteId);
+
     try {
       const device = await this.prisma.device.create({
         data: {
-          ...dto,
-          owner: { connect: { id: user.id } },
+          ...deviceData,
+          ownerId: user.id,
+          siteId: resolvedSiteId,
         },
       });
       this.publishDeviceEvent(AuditAction.DEVICE_CREATED, device, user);
@@ -123,10 +136,17 @@ export class DevicesService {
     dto: UpdateDeviceDto,
     user: AuthenticatedUser,
   ): Promise<Device> {
+    const { siteId, ...deviceData } = dto;
+    const data: Prisma.DeviceUncheckedUpdateInput = { ...deviceData };
+
+    if (siteId !== undefined) {
+      data.siteId = await this.resolveSiteId(user.id, siteId);
+    }
+
     try {
       const device = await this.prisma.device.update({
         where: { id, ...this.getOwnershipFilter(user) },
-        data: dto,
+        data,
       });
       this.publishDeviceEvent(AuditAction.DEVICE_UPDATED, device, user, {
         changedFields: Object.keys(dto),
@@ -155,6 +175,43 @@ export class DevicesService {
     return user.role === UserRole.ADMIN ? {} : { ownerId: user.id };
   }
 
+  private async resolveSiteId(
+    ownerId: number,
+    requestedSiteId?: string,
+  ): Promise<string> {
+    if (requestedSiteId) {
+      const site = await this.prisma.networkSite.findFirst({
+        where: { id: requestedSiteId, ownerId },
+        select: { id: true },
+      });
+
+      if (!site) {
+        throw new NotFoundException(
+          'Network site ' + requestedSiteId + ' not found',
+        );
+      }
+
+      return site.id;
+    }
+
+    const defaultSite = await this.prisma.networkSite.upsert({
+      where: {
+        ownerId_name: {
+          ownerId,
+          name: DEFAULT_SITE_NAME,
+        },
+      },
+      create: {
+        ownerId,
+        name: DEFAULT_SITE_NAME,
+      },
+      update: {},
+      select: { id: true },
+    });
+
+    return defaultSite.id;
+  }
+
   private publishDeviceEvent(
     action: AuditAction,
     device: Device,
@@ -171,6 +228,7 @@ export class DevicesService {
         metadata: {
           name: device.name,
           ip: device.ip,
+          siteId: device.siteId,
           ...metadata,
         },
       }),
@@ -189,19 +247,23 @@ export class DevicesService {
 
         if (fields.includes('name') && dto?.name) {
           throw new ConflictException(
-            `Device name "${dto.name}" already exists`,
+            'Device name "' + dto.name + '" already exists in this site',
           );
         }
 
         if (fields.includes('ip') && dto?.ip) {
-          throw new ConflictException(`Device IP "${dto.ip}" already exists`);
+          throw new ConflictException(
+            'Device IP "' + dto.ip + '" already exists in this site',
+          );
         }
 
-        throw new ConflictException('Device name or IP already exists');
+        throw new ConflictException(
+          'Device name or IP already exists in this site',
+        );
       }
 
       if (error.code === 'P2025' && id !== undefined) {
-        throw new NotFoundException(`Device ${id} not found`);
+        throw new NotFoundException('Device ' + id + ' not found');
       }
     }
 

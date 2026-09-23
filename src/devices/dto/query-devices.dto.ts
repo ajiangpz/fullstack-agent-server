@@ -51,6 +51,15 @@ export class QueryDevicesDto {
   status?: DeviceStatus;
 
   @ApiPropertyOptional({
+    example: 'cm123site',
+    description: '按站点 ID 过滤',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  siteId?: string;
+
+  @ApiPropertyOptional({
     example: 1,
     minimum: 1,
     maximum: 128,
