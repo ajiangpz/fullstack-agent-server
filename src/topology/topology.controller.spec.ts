@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { TopologyController } from './topology.controller';
 import { TopologyQueryService } from './topology-query.service';
+import { TopologyViewService } from './topology-view.service';
 
 describe('TopologyController', () => {
   let controller: TopologyController;
@@ -13,6 +14,10 @@ describe('TopologyController', () => {
       providers: [
         {
           provide: TopologyQueryService,
+          useValue: {},
+        },
+        {
+          provide: TopologyViewService,
           useValue: {},
         },
       ],
@@ -30,7 +35,7 @@ describe('TopologyController', () => {
     expect(controller).toBeDefined();
   });
 
-  it.each(['listSites', 'getTopology'] as const)(
+  it.each(['listSites', 'getTopology', 'getTopologyView', 'saveTopologyView'] as const)(
     'allows authenticated users to call %s so ownership is enforced in the service',
     (method) => {
       expect(

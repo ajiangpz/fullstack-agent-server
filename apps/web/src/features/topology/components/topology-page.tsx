@@ -1,12 +1,17 @@
 'use client';
 
-import { Maximize2, Network, RefreshCw, Search } from 'lucide-react';
+import { Maximize2, Network, RefreshCw, Save, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/i18n/use-translation';
-import { useNetworkSites, useTopologySnapshot } from '../hooks';
+import {
+  useNetworkSites,
+  useSaveTopologyView,
+  useTopologySnapshot,
+  useTopologyView,
+} from '../hooks';
 import { toG6GraphData } from '../graph/topology-graph-data';
 import {
   buildTopologyHierarchy,
@@ -14,7 +19,7 @@ import {
   findTopologyNode,
   getTopologyAncestors,
 } from '../graph/topology-view';
-import type { DeviceType } from '../types';
+import type { DeviceType, TopologyLayoutCapture } from '../types';
 import { useTopologyUiStore } from '../ui-store';
 import { TopologyCanvas } from './topology-canvas';
 import { TopologyDetailPanel } from './topology-detail-panel';
@@ -27,6 +32,9 @@ export function TopologyPage() {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [fitRequest, setFitRequest] = useState(0);
   const [focusRequest, setFocusRequest] = useState<{ id: string; token: number } | null>(null);
+  const [captureRequest, setCaptureRequest] = useState(0);
+  const [resetLayoutRequest, setResetLayoutRequest] = useState(0);
+  const [layoutDirty, setLayoutDirty] = useState(false);
   const [searchMiss, setSearchMiss] = useState(false);
 
   const search = useTopologyUiStore((state) => state.search);
@@ -51,10 +59,14 @@ export function TopologyPage() {
   useEffect(() => {
     resetWorkspace();
     setSearchMiss(false);
+    setLayoutDirty(false);
   }, [resetWorkspace, selectedSiteId]);
 
   const topologyQuery = useTopologySnapshot(selectedSiteId);
+  const viewQuery = useTopologyView(selectedSiteId);
+  const saveViewMutation = useSaveTopologyView(selectedSiteId);
   const snapshot = topologyQuery.data;
+  const persistedView = viewQuery.data ?? null;
   const hierarchy = useMemo(() => snapshot ? buildTopologyHierarchy(snapshot) : null, [snapshot]);
   const graphData = useMemo(() => snapshot && hierarchy ? toG6GraphData(snapshot, hierarchy) : { nodes: [], edges: [] }, [hierarchy, snapshot]);
   const visibility = useMemo(
@@ -83,6 +95,18 @@ export function TopologyPage() {
   if (sites.length === 0) return <WorkspaceState icon={<Network />} message={t('topology.noSites')} />;
 
   const onlineCount = snapshot?.nodes.filter((node) => node.status === 'online').length ?? 0;
+  const staleLayout = Boolean(
+    snapshot && persistedView?.viewId && persistedView.topologyRevision !== snapshot.revision,
+  );
+  const canSaveLayout = Boolean(
+    snapshot && !viewQuery.isError && !saveViewMutation.isPending &&
+      (!persistedView?.viewId || layoutDirty || staleLayout),
+  );
+
+  function refreshWorkspace() {
+    setLayoutDirty(false);
+    void Promise.all([topologyQuery.refetch(), viewQuery.refetch()]);
+  }
 
   function locateSearchResult(event: React.FormEvent) {
     event.preventDefault();
@@ -94,6 +118,18 @@ export function TopologyPage() {
     for (const ancestor of getTopologyAncestors(node.id, hierarchy)) setCollapsed(ancestor, false);
     setSelected({ kind: 'node', id: node.id });
     setFocusRequest((current) => ({ id: node.id, token: (current?.token ?? 0) + 1 }));
+  }
+
+  function saveCapturedLayout(capture: TopologyLayoutCapture) {
+    if (!snapshot) return;
+    saveViewMutation.mutate(
+      {
+        expectedRevision: persistedView?.revision ?? 0,
+        topologyRevision: snapshot.revision,
+        ...capture,
+      },
+      { onSuccess: () => setLayoutDirty(false) },
+    );
   }
 
   return (
@@ -111,13 +147,20 @@ export function TopologyPage() {
               {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
             </select>
           </label>
-          <Button variant="secondary" size="sm" disabled={!selectedSiteId || topologyQuery.isFetching} onClick={() => void topologyQuery.refetch()}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${topologyQuery.isFetching ? 'animate-spin' : ''}`} />
+          <Button variant="secondary" size="sm" disabled={!selectedSiteId || topologyQuery.isFetching || viewQuery.isFetching} onClick={refreshWorkspace}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${topologyQuery.isFetching || viewQuery.isFetching ? 'animate-spin' : ''}`} />
             {t('topology.refresh')}
           </Button>
-          <Button variant="secondary" size="sm" disabled={!snapshot || snapshot.nodes.length === 0} onClick={() => setFitRequest((value) => value + 1)}>
+          <Button variant="secondary" size="sm" disabled={!snapshot || snapshot.nodes.length === 0} onClick={() => { setFitRequest((value) => value + 1); setLayoutDirty(true); }}>
             <Maximize2 className="mr-2 h-4 w-4" />
             {t('topology.fit')}
+          </Button>
+          <Button variant="secondary" size="sm" disabled={!snapshot || snapshot.nodes.length === 0} onClick={() => { setResetLayoutRequest((value) => value + 1); setLayoutDirty(true); }}>
+            {t('topology.layout.auto')}
+          </Button>
+          <Button size="sm" disabled={!canSaveLayout} onClick={() => setCaptureRequest((value) => value + 1)}>
+            <Save className="mr-2 h-4 w-4" />
+            {saveViewMutation.isPending ? t('topology.layout.saving') : t('topology.layout.save')}
           </Button>
         </div>
       </div>
@@ -148,20 +191,38 @@ export function TopologyPage() {
           <Metric label={t('topology.links')} value={snapshot?.edges.length ?? 0} />
         </div>
         {snapshot ? <span className="text-xs text-zinc-600">{t('topology.visible', { count: visibility.visibleNodeIds.size })}</span> : null}
+        <LayoutStatus
+          text={layoutStatusText({
+            hasView: Boolean(persistedView?.viewId),
+            dirty: layoutDirty,
+            stale: staleLayout,
+            loading: viewQuery.isLoading,
+            error: viewQuery.isError,
+            t,
+          })}
+          warning={layoutDirty || staleLayout || viewQuery.isError}
+        />
       </div>
 
+      {saveViewMutation.isError ? <p className="text-xs text-red-300">{t('topology.layout.saveError')}</p> : null}
+
       <Card className="relative min-h-0 flex-1 overflow-hidden p-2">
-        {topologyQuery.isLoading || !snapshot || !hierarchy ? (
+        {topologyQuery.isLoading || viewQuery.isLoading || !snapshot || !hierarchy ? (
           <div className="grid h-full min-h-[440px] place-items-center text-sm text-zinc-500">{topologyQuery.isError ? t('topology.loadError') : t('topology.loading')}</div>
         ) : (
           <TopologyCanvas
             data={graphData}
+            persistedView={persistedView}
             fitRequest={fitRequest}
             focusRequest={focusRequest}
+            captureRequest={captureRequest}
+            resetLayoutRequest={resetLayoutRequest}
             visibleNodeIds={visibility.visibleNodeIds}
             visibleEdgeIds={visibility.visibleEdgeIds}
             selected={selected}
             onSelectionChange={setSelected}
+            onLayoutDirty={() => setLayoutDirty(true)}
+            onLayoutCapture={saveCapturedLayout}
             empty={snapshot.nodes.length === 0}
             ariaLabel={t('topology.canvasAria')}
             emptyMessage={t('topology.empty')}
@@ -186,6 +247,10 @@ function Metric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2"><p className="text-[11px] uppercase tracking-wide text-zinc-600">{label}</p><p className="mt-1 text-lg font-semibold text-zinc-200">{value}</p></div>;
 }
 
+function LayoutStatus({ text, warning }: { text: string; warning: boolean }) {
+  return <span className={`rounded-full border px-2.5 py-1 text-[11px] ${warning ? 'border-amber-900 bg-amber-950/50 text-amber-300' : 'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>{text}</span>;
+}
+
 function WorkspaceState({ icon, message, tone = 'muted' }: { icon: React.ReactNode; message: string; tone?: 'muted' | 'error' }) {
   return <div className="grid h-full min-h-[480px] place-items-center"><div className={`flex max-w-md flex-col items-center gap-3 text-center text-sm ${tone === 'error' ? 'text-red-300' : 'text-zinc-500'}`}><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-zinc-400">{icon}</div>{message}</div></div>;
 }
@@ -196,4 +261,12 @@ function formatSnapshotTime(value: string, locale: string) {
 
 function formatEnum(value: string) {
   return value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function layoutStatusText({ hasView, dirty, stale, loading, error, t }: { hasView: boolean; dirty: boolean; stale: boolean; loading: boolean; error: boolean; t: ReturnType<typeof useTranslation>['t'] }) {
+  if (loading) return t('topology.layout.loading');
+  if (error) return t('topology.layout.loadError');
+  if (dirty) return t('topology.layout.unsaved');
+  if (stale) return t('topology.layout.stale');
+  return hasView ? t('topology.layout.saved') : t('topology.layout.notSaved');
 }

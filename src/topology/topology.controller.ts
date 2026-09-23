@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -19,13 +21,21 @@ import {
   TopologySnapshotDto,
 } from './dto/topology.dto';
 import { TopologyQueryService } from './topology-query.service';
+import {
+  SaveTopologyViewDto,
+  TopologyViewDto,
+} from './dto/topology-view.dto';
+import { TopologyViewService } from './topology-view.service';
 
 @ApiTags('topology')
 @ApiBearerAuth()
 @Controller('sites')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TopologyController {
-  constructor(private readonly topologyQueryService: TopologyQueryService) {}
+  constructor(
+    private readonly topologyQueryService: TopologyQueryService,
+    private readonly topologyViewService: TopologyViewService,
+  ) {}
 
   @ApiOperation({ summary: '获取可访问的网络站点列表' })
   @ApiOkResponse({ type: [NetworkSiteSummaryDto] })
@@ -44,5 +54,26 @@ export class TopologyController {
     @Req() request: { user: AuthenticatedUser },
   ): Promise<TopologySnapshotDto> {
     return this.topologyQueryService.getTopology(siteId, request.user);
+  }
+
+  @ApiOperation({ summary: '获取当前用户在指定站点的拓扑视图布局' })
+  @ApiOkResponse({ type: TopologyViewDto })
+  @Get(':siteId/topology/view')
+  getTopologyView(
+    @Param('siteId') siteId: string,
+    @Req() request: { user: AuthenticatedUser },
+  ): Promise<TopologyViewDto> {
+    return this.topologyViewService.getView(siteId, request.user);
+  }
+
+  @ApiOperation({ summary: '保存当前用户在指定站点的拓扑视图布局' })
+  @ApiOkResponse({ type: TopologyViewDto })
+  @Put(':siteId/topology/view')
+  saveTopologyView(
+    @Param('siteId') siteId: string,
+    @Body() dto: SaveTopologyViewDto,
+    @Req() request: { user: AuthenticatedUser },
+  ): Promise<TopologyViewDto> {
+    return this.topologyViewService.saveView(siteId, dto, request.user);
   }
 }

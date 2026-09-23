@@ -5,13 +5,17 @@ import {
   NodeEvent,
   type GraphData,
 } from '@antv/g6';
+import type { TopologyLayoutCapture, TopologyView } from '../types';
 import type { TopologySelection } from '../ui-store';
 
 export type TopologyGraph = Graph;
 
 export function createTopologyGraph(
   container: HTMLElement,
-  onSelectionChange: (selection: TopologySelection) => void,
+  callbacks: {
+    onSelectionChange: (selection: TopologySelection) => void;
+    onLayoutDirty: () => void;
+  },
 ) {
   const graph = new Graph({
     container,
@@ -50,16 +54,30 @@ export function createTopologyGraph(
         highlight: { stroke: '#67e8f9', lineWidth: 2.5 },
       },
     },
-    behaviors: ['drag-canvas', 'zoom-canvas'],
+    behaviors: [
+      'drag-canvas',
+      'zoom-canvas',
+      {
+        type: 'drag-element',
+        key: 'drag-node',
+        trigger: [],
+        dropEffect: 'none',
+        shadow: false,
+        enable: (event) => event.targetType === 'node',
+      },
+    ],
   });
 
   graph.on(NodeEvent.CLICK, (event) => {
-    onSelectionChange({ kind: 'node', id: event.target.id });
+    callbacks.onSelectionChange({ kind: 'node', id: event.target.id });
   });
   graph.on(EdgeEvent.CLICK, (event) => {
-    onSelectionChange({ kind: 'edge', id: event.target.id });
+    callbacks.onSelectionChange({ kind: 'edge', id: event.target.id });
   });
-  graph.on(CanvasEvent.CLICK, () => onSelectionChange(null));
+  graph.on(CanvasEvent.CLICK, () => callbacks.onSelectionChange(null));
+  graph.on(NodeEvent.DRAG_END, callbacks.onLayoutDirty);
+  graph.on(CanvasEvent.DRAG_END, callbacks.onLayoutDirty);
+  graph.on(CanvasEvent.WHEEL, callbacks.onLayoutDirty);
 
   return graph;
 }
@@ -73,8 +91,49 @@ export async function fitTopologyGraph(graph: TopologyGraph) {
   await graph.fitView();
 }
 
+export async function resetTopologyLayout(graph: TopologyGraph) {
+  await graph.layout();
+  await graph.fitView();
+}
+
 export async function focusTopologyElement(graph: TopologyGraph, id: string) {
   await graph.focusElement(id, { duration: 350, easing: 'ease-in-out' });
+}
+
+export async function restoreTopologyView(
+  graph: TopologyGraph,
+  view: TopologyView,
+) {
+  if (!view.viewId || !view.viewport) return;
+
+  const nodeIds = new Set(graph.getNodeData().map((node) => node.id));
+  const positions: Record<string, [number, number]> = {};
+  for (const node of view.nodes) {
+    if (nodeIds.has(node.nodeId)) positions[node.nodeId] = [node.x, node.y];
+  }
+
+  if (Object.keys(positions).length > 0) {
+    await graph.translateElementTo(positions, false);
+  }
+  await graph.zoomTo(view.viewport.zoom, false);
+  await graph.translateTo([view.viewport.x, view.viewport.y], false);
+}
+
+export function captureTopologyLayout(
+  graph: TopologyGraph,
+): TopologyLayoutCapture {
+  const position = graph.getPosition();
+  return {
+    viewport: {
+      x: position[0],
+      y: position[1],
+      zoom: graph.getZoom(),
+    },
+    nodes: graph.getNodeData().map((node) => {
+      const point = graph.getElementPosition(node.id);
+      return { nodeId: node.id, x: point[0], y: point[1] };
+    }),
+  };
 }
 
 export async function applyTopologyVisibility(

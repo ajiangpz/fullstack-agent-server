@@ -222,6 +222,7 @@ model NetworkSite {
   topologyRevision Int            @default(0)
   devices          Device[]
   topologyLinks    TopologyLink[]
+  topologyViews    TopologyView[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -321,6 +322,37 @@ model TopologyLink {
   @@map("topology_links")
 }
 
+model TopologyView {
+  id               String             @id @default(cuid())
+  siteId           String
+  site             NetworkSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  ownerId          Int
+  owner            User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  revision         Int                @default(0)
+  topologyRevision Int                @default(0)
+  viewportX        Float              @default(0)
+  viewportY        Float              @default(0)
+  zoom             Float              @default(1)
+  nodes            TopologyViewNode[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([siteId, ownerId])
+  @@index([ownerId, updatedAt])
+  @@map("topology_views")
+}
+
+model TopologyViewNode {
+  viewId String
+  view   TopologyView @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  nodeId String       @db.VarChar(128)
+  x      Float
+  y      Float
+
+  @@id([viewId, nodeId])
+  @@map("topology_view_nodes")
+}
+
 model User {
   id            Int            @id @default(autoincrement())
   username      String         @unique @db.VarChar(50)
@@ -332,6 +364,7 @@ model User {
   lastLoginAt   DateTime?
   devices       Device[]       @relation("UserDevices")
   sites         NetworkSite[]  @relation("UserSites")
+  topologyViews TopologyView[]
   auditLogs     AuditLog[]
   aiTasks       AiTask[]
   conversations Conversation[]

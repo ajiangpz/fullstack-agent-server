@@ -65,3 +65,38 @@ export interface TopologySnapshot {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
 }
+
+export interface TopologyViewNodePosition {
+  nodeId: string;
+  x: number;
+  y: number;
+}
+
+export interface TopologyViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface TopologyView {
+  schemaVersion: 1;
+  siteId: string;
+  viewId: string | null;
+  revision: number;
+  topologyRevision: number | null;
+  viewport: TopologyViewport | null;
+  nodes: TopologyViewNodePosition[];
+  updatedAt: string | null;
+}
+
+export interface SaveTopologyViewPayload {
+  expectedRevision: number;
+  topologyRevision: number;
+  viewport: TopologyViewport;
+  nodes: TopologyViewNodePosition[];
+}
+
+export interface TopologyLayoutCapture {
+  viewport: TopologyViewport;
+  nodes: TopologyViewNodePosition[];
+}
