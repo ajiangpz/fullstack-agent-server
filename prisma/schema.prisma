@@ -74,6 +74,14 @@ enum DiscoverySource {
   CDP
 }
 
+enum DiscoveryRunStatus {
+  PENDING
+  DISCOVERING
+  RECONCILING
+  COMPLETED
+  FAILED
+}
+
 enum UserRole {
   ADMIN
   USER
@@ -223,6 +231,7 @@ model NetworkSite {
   devices          Device[]
   topologyLinks    TopologyLink[]
   topologyViews    TopologyView[]
+  discoveryRuns    DiscoveryRun[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -322,6 +331,69 @@ model TopologyLink {
   @@map("topology_links")
 }
 
+model DiscoveryRun {
+  id                       String             @id @default(cuid())
+  siteId                   String
+  site                     NetworkSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  requestedById            Int?
+  requestedBy              User?              @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  source                    DiscoverySource
+  status                    DiscoveryRunStatus @default(PENDING)
+  requestPayload            Json?
+  observationCount          Int                @default(0)
+  resolvedObservationCount  Int                @default(0)
+  reconciledLinkCount       Int                @default(0)
+  errorMessage              String?            @db.Text
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  observations              TopologyObservation[]
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  @@index([siteId, createdAt])
+  @@index([siteId, status])
+  @@index([requestedById, createdAt])
+  @@map("discovery_runs")
+}
+
+model TopologyObservation {
+  id                  String             @id @default(cuid())
+  runId               String
+  run                 DiscoveryRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  source              DiscoverySource
+  localDeviceId       Int
+  localPortId         Int?
+  localPortName       String?            @db.VarChar(100)
+  localPortIfIndex    Int?
+  remoteDeviceId      Int?
+  remotePortId        Int?
+  remoteManagementIp  String?            @db.Inet
+  remoteMacAddress    String?            @db.VarChar(17)
+  remoteChassisId     String?            @db.VarChar(255)
+  remotePortName      String?            @db.VarChar(100)
+  remotePortIfIndex   Int?
+  aDeviceId           Int?
+  aPortId             Int?
+  zDeviceId           Int?
+  zPortId             Int?
+  canonicalKey        String?            @db.VarChar(160)
+  linkType            TopologyLinkType   @default(ETHERNET)
+  linkStatus          TopologyLinkStatus @default(UNKNOWN)
+  speedMbps           Int?
+  confidence          Float              @default(1)
+  observedAt          DateTime
+  expiresAt           DateTime?
+  resolutionError     String?            @db.VarChar(500)
+  metadata            Json?
+  createdAt           DateTime           @default(now())
+
+  @@index([runId])
+  @@index([canonicalKey, expiresAt])
+  @@index([localDeviceId])
+  @@index([remoteDeviceId])
+  @@map("topology_observations")
+}
+
 model TopologyView {
   id               String             @id @default(cuid())
   siteId           String
@@ -365,6 +437,7 @@ model User {
   devices       Device[]       @relation("UserDevices")
   sites         NetworkSite[]  @relation("UserSites")
   topologyViews TopologyView[]
+  discoveryRuns DiscoveryRun[]
   auditLogs     AuditLog[]
   aiTasks       AiTask[]
   conversations Conversation[]

@@ -4,6 +4,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { TopologyController } from './topology.controller';
 import { TopologyQueryService } from './topology-query.service';
 import { TopologyViewService } from './topology-view.service';
+import { TopologyDiscoveryService } from './topology-discovery.service';
 
 describe('TopologyController', () => {
   let controller: TopologyController;
@@ -18,6 +19,10 @@ describe('TopologyController', () => {
         },
         {
           provide: TopologyViewService,
+          useValue: {},
+        },
+        {
+          provide: TopologyDiscoveryService,
           useValue: {},
         },
       ],
@@ -35,7 +40,14 @@ describe('TopologyController', () => {
     expect(controller).toBeDefined();
   });
 
-  it.each(['listSites', 'getTopology', 'getTopologyView', 'saveTopologyView'] as const)(
+  it.each([
+    'listSites',
+    'getTopology',
+    'getTopologyView',
+    'saveTopologyView',
+    'createTopologyDiscovery',
+    'getTopologyDiscovery',
+  ] as const)(
     'allows authenticated users to call %s so ownership is enforced in the service',
     (method) => {
       expect(

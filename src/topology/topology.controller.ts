@@ -3,12 +3,14 @@ import {
   Controller,
   Get,
   Param,
+  Post,
   Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -26,6 +28,11 @@ import {
   TopologyViewDto,
 } from './dto/topology-view.dto';
 import { TopologyViewService } from './topology-view.service';
+import {
+  CreateTopologyDiscoveryDto,
+  TopologyDiscoveryRunDto,
+} from './dto/topology-discovery.dto';
+import { TopologyDiscoveryService } from './topology-discovery.service';
 
 @ApiTags('topology')
 @ApiBearerAuth()
@@ -35,6 +42,7 @@ export class TopologyController {
   constructor(
     private readonly topologyQueryService: TopologyQueryService,
     private readonly topologyViewService: TopologyViewService,
+    private readonly topologyDiscoveryService: TopologyDiscoveryService,
   ) {}
 
   @ApiOperation({ summary: '获取可访问的网络站点列表' })
@@ -75,5 +83,27 @@ export class TopologyController {
     @Req() request: { user: AuthenticatedUser },
   ): Promise<TopologyViewDto> {
     return this.topologyViewService.saveView(siteId, dto, request.user);
+  }
+
+  @ApiOperation({ summary: '创建拓扑发现任务' })
+  @ApiCreatedResponse({ type: TopologyDiscoveryRunDto })
+  @Post(':siteId/topology/discovery')
+  createTopologyDiscovery(
+    @Param('siteId') siteId: string,
+    @Body() dto: CreateTopologyDiscoveryDto,
+    @Req() request: { user: AuthenticatedUser },
+  ): Promise<TopologyDiscoveryRunDto> {
+    return this.topologyDiscoveryService.create(siteId, dto, request.user);
+  }
+
+  @ApiOperation({ summary: '查询拓扑发现任务' })
+  @ApiOkResponse({ type: TopologyDiscoveryRunDto })
+  @Get(':siteId/topology/discovery/:runId')
+  getTopologyDiscovery(
+    @Param('siteId') siteId: string,
+    @Param('runId') runId: string,
+    @Req() request: { user: AuthenticatedUser },
+  ): Promise<TopologyDiscoveryRunDto> {
+    return this.topologyDiscoveryService.findOne(siteId, runId, request.user);
   }
 }
