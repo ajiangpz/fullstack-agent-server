@@ -45,6 +45,10 @@ function resizeComposer(element: HTMLTextAreaElement | null) {
   element.style.height = `${Math.min(element.scrollHeight, 176)}px`;
 }
 
+export function isAgentPromptSubmittable(prompt: string): boolean {
+  return prompt.trim().length > 0;
+}
+
 export function createTemporaryAssistantMessage({
   taskId,
   taskStatus,
@@ -114,12 +118,14 @@ export function AgentPage() {
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<AgentPromptInput>({
     resolver: zodResolver(agentPromptSchema),
     defaultValues: { prompt: '' },
   });
   const promptRegistration = register('prompt');
+  const promptValue = watch('prompt');
 
   useEffect(() => {
     hydrateConversation();
@@ -141,6 +147,8 @@ export function AgentPage() {
     createTaskMutation.isPending ||
     conversationBusy ||
     taskActive;
+
+  const canSubmitPrompt = !isBusy && isAgentPromptSubmittable(promptValue);
 
   const messages = conversationQuery.data?.messages ?? [];
   const temporaryMessage = createTemporaryAssistantMessage({
@@ -419,7 +427,8 @@ export function AgentPage() {
                     if (
                       event.key === 'Enter' &&
                       !event.shiftKey &&
-                      !event.nativeEvent.isComposing
+                      !event.nativeEvent.isComposing &&
+                      canSubmitPrompt
                     ) {
                       event.preventDefault();
                       formRef.current?.requestSubmit();
@@ -428,7 +437,7 @@ export function AgentPage() {
                 />
                 <Button
                   type="submit"
-                  disabled={isBusy}
+                  disabled={!canSubmitPrompt}
                   aria-label={t('conversation.send')}
                   title={t('conversation.send')}
                   className="h-10 w-10 shrink-0 rounded-full p-0"
@@ -445,7 +454,8 @@ export function AgentPage() {
             </form>
           </div>
 
-          {errors.prompt ? (
+          {errors.prompt &&
+          errors.prompt.message !== 'validation.agent.required' ? (
             <p className="mt-2 px-3 text-xs text-red-400">
               {translateValidationMessage(errors.prompt.message, t)}
             </p>

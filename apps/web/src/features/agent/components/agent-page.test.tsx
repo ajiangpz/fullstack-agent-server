@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createTemporaryAssistantMessage } from './agent-page';
+import {
+  createTemporaryAssistantMessage,
+  isAgentPromptSubmittable,
+} from './agent-page';
 import type { ConversationMessage } from '../types';
 
 const persisted = (taskId: string): ConversationMessage => ({
@@ -52,5 +55,18 @@ describe('createTemporaryAssistantMessage', () => {
         createdAt: '2026-09-20T00:00:00.000Z',
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('isAgentPromptSubmittable', () => {
+  it('rejects empty and whitespace-only prompts', () => {
+    expect(isAgentPromptSubmittable('')).toBe(false);
+    expect(isAgentPromptSubmittable('   ')).toBe(false);
+    expect(isAgentPromptSubmittable('\n\t')).toBe(false);
+  });
+
+  it('allows prompts containing visible text', () => {
+    expect(isAgentPromptSubmittable('哪些设备当前离线？')).toBe(true);
+    expect(isAgentPromptSubmittable('  offline devices  ')).toBe(true);
   });
 });
