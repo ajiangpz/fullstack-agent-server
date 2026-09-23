@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Gauge,
   LogOut,
+  Network,
   ScrollText,
   Settings,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import { cn } from '@/lib/utils';
 const navigation = [
   { href: '/dashboard', label: 'nav.overview' as const, icon: Gauge },
   { href: '/devices', label: 'nav.devices' as const, icon: Boxes },
+  { href: '/topology', label: 'nav.topology' as const, icon: Network },
   { href: '/agent', label: 'nav.agent' as const, icon: Bot },
   { href: '/tasks', label: 'nav.tasks' as const, icon: ClipboardList },
   { href: '/audit', label: 'nav.audit' as const, icon: ScrollText },
@@ -32,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
   const { t } = useTranslation();
-  const isAgentPage = pathname === '/agent';
+  const isWorkspacePage = pathname === '/agent' || pathname === '/topology';
 
   function logout() {
     clearSession();
@@ -43,7 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div
       className={cn(
         'bg-zinc-950 text-zinc-100',
-        isAgentPage ? 'fixed inset-0 overflow-hidden' : 'min-h-screen',
+        isWorkspacePage ? 'fixed inset-0 overflow-hidden' : 'min-h-screen',
       )}
     >
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-zinc-800 bg-zinc-950/95 p-4 lg:block">
@@ -78,13 +80,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div
         className={cn(
           'lg:pl-64',
-          isAgentPage && 'flex h-full min-h-0 flex-col overflow-hidden',
+          isWorkspacePage && 'flex h-full min-h-0 flex-col overflow-hidden',
         )}
       >
         <header
           className={cn(
             'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-5 backdrop-blur lg:px-8',
-            isAgentPage && 'shrink-0',
+            isWorkspacePage && 'shrink-0',
           )}
         >
           <div>
@@ -113,7 +115,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main
           className={cn(
             'px-5 py-8 lg:px-8',
-            isAgentPage && 'min-h-0 flex-1 overflow-hidden',
+            isWorkspacePage && 'min-h-0 flex-1 overflow-hidden',
           )}
         >
           {children}
