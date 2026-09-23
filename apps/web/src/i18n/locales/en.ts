@@ -3,6 +3,10 @@ export const en = {
   'language.chinese': '中文',
   'language.switchToEnglish': 'Switch to English',
   'language.switchToChinese': '切换到中文',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
+  'theme.switchToLight': 'Switch to light mode',
+  'theme.switchToDark': 'Switch to dark mode',
 
   'common.loading': 'Loading…',
   'common.reset': 'Reset',
@@ -71,7 +75,6 @@ export const en = {
   'auth.register.failure': 'Unable to create account. Try again.',
   'auth.gate.loading': 'Loading Network Agent…',
 
-  'dashboard.section': 'Overview',
   'dashboard.title': 'Network Agent Console',
   'dashboard.description':
     'Live operational totals from your device inventory and persisted Agent tasks.',
@@ -109,7 +112,6 @@ export const en = {
   'dashboard.audit.actor': 'actor {actor}',
   'dashboard.audit.view': 'View audit logs',
 
-  'devices.section': 'Inventory',
   'devices.title': 'Devices',
   'devices.description': 'Manage the network devices available to your account.',
   'devices.add': 'Add device',
@@ -168,7 +170,6 @@ export const en = {
   'device.delete.deleting': 'Deleting…',
   'device.delete.failure': 'Unable to delete device.',
 
-  'agent.section': 'AI Operations',
   'agent.title': 'Network Agent',
   'agent.description':
     'Ask questions about the devices available to your account. The backend Agent decides when to call network-device tools and returns a structured answer.',
@@ -217,7 +218,6 @@ export const en = {
   'agent.status.failed.description':
     'The Agent could not complete this task after its execution attempts.',
 
-  'tasks.section': 'Agent Operations',
   'tasks.title': 'Tasks',
   'tasks.description':
     'Review Agent task history, execution status, retries and persisted traces.',
@@ -237,7 +237,6 @@ export const en = {
   'tasks.previousAria': 'Previous task page',
   'tasks.nextAria': 'Next task page',
   'task.detail.back': 'Back to Agent',
-  'task.detail.section': 'Agent Execution Trace',
   'task.detail.title': 'Task detail',
   'task.detail.loading': 'Loading Agent task…',
   'task.detail.loadError': 'Unable to load Agent task.',
@@ -265,7 +264,6 @@ export const en = {
   'trace.result': 'Result',
   'trace.output': 'Output',
 
-  'audit.section': 'Security',
   'audit.title': 'Audit Logs',
   'audit.description':
     'Review authentication events and device changes recorded by the backend audit domain.',
@@ -299,12 +297,14 @@ export const en = {
   'audit.action.DEVICE_UPDATED': 'Device updated',
   'audit.action.DEVICE_DELETED': 'Device deleted',
 
-  'settings.section': 'Preferences',
   'settings.title': 'Settings',
   'settings.description': 'Manage local console preferences.',
   'settings.language.title': 'Language',
   'settings.language.description':
     'Choose the display language for this browser. The preference is stored locally and does not change API data.',
+  'settings.theme.title': 'Theme mode',
+  'settings.theme.description':
+    'Switch between light and dark mode. The preference is stored locally in this browser.',
 
   'conversation.new': 'New conversation',
   'conversation.empty': 'Start a conversation with the Network Agent.',

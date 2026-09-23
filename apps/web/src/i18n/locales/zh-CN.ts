@@ -5,6 +5,10 @@ export const zhCN = {
   'language.chinese': '中文',
   'language.switchToEnglish': '切换到英文',
   'language.switchToChinese': '切换到中文',
+  'theme.light': '白天模式',
+  'theme.dark': '暗夜模式',
+  'theme.switchToLight': '切换到白天模式',
+  'theme.switchToDark': '切换到暗夜模式',
 
   'common.loading': '加载中…',
   'common.reset': '重置',
@@ -72,7 +76,6 @@ export const zhCN = {
   'auth.register.failure': '无法创建账号，请重试。',
   'auth.gate.loading': '正在加载 Network Agent…',
 
-  'dashboard.section': '概览',
   'dashboard.title': 'Network Agent 控制台',
   'dashboard.description': '查看设备库存和 Agent 任务的实时运行统计。',
   'dashboard.partialError': '部分概览数据加载失败，已继续显示可用内容。',
@@ -104,7 +107,6 @@ export const zhCN = {
   'dashboard.audit.actor': '操作人 {actor}',
   'dashboard.audit.view': '查看审计日志',
 
-  'devices.section': '设备库存',
   'devices.title': '设备',
   'devices.description': '管理当前账号可访问的网络设备。',
   'devices.add': '添加设备',
@@ -161,7 +163,6 @@ export const zhCN = {
   'device.delete.deleting': '删除中…',
   'device.delete.failure': '无法删除设备。',
 
-  'agent.section': 'AI 运维',
   'agent.title': 'Network Agent',
   'agent.description':
     '向 Agent 询问当前账号可访问的设备。后端 Agent 会自行判断何时调用网络设备工具，并返回结构化结果。',
@@ -205,7 +206,6 @@ export const zhCN = {
   'agent.status.failed.title': '失败',
   'agent.status.failed.description': 'Agent 在执行尝试后仍未能完成该任务。',
 
-  'tasks.section': 'Agent 运维',
   'tasks.title': '任务',
   'tasks.description': '查看 Agent 历史任务、执行状态、重试次数和持久化执行链路。',
   'tasks.search': '搜索任务 Prompt',
@@ -224,7 +224,6 @@ export const zhCN = {
   'tasks.previousAria': '上一页任务',
   'tasks.nextAria': '下一页任务',
   'task.detail.back': '返回 Agent',
-  'task.detail.section': 'Agent 执行链路',
   'task.detail.title': '任务详情',
   'task.detail.loading': '正在加载 Agent 任务…',
   'task.detail.loadError': '无法加载 Agent 任务。',
@@ -251,7 +250,6 @@ export const zhCN = {
   'trace.result': '结果',
   'trace.output': '输出',
 
-  'audit.section': '安全',
   'audit.title': '审计日志',
   'audit.description': '查看后端审计域记录的认证事件和设备变更。',
   'audit.descriptionAdmin': '查看所有账号的审计活动，并可按操作人筛选。',
@@ -281,12 +279,14 @@ export const zhCN = {
   'audit.action.DEVICE_UPDATED': '更新设备',
   'audit.action.DEVICE_DELETED': '删除设备',
 
-  'settings.section': '偏好设置',
   'settings.title': '设置',
   'settings.description': '管理本地控制台偏好。',
   'settings.language.title': '语言',
   'settings.language.description':
     '选择此浏览器的显示语言。偏好保存在本地，不会修改 API 数据。',
+  'settings.theme.title': '主题模式',
+  'settings.theme.description':
+    '在白天模式和暗夜模式之间切换。偏好会保存在当前浏览器中。',
 
   'conversation.new': '新建会话',
   'conversation.empty': '向 Network Agent 发送第一条消息。',

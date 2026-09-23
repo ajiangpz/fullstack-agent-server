@@ -91,7 +91,7 @@ export function DeviceFormModal({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
               {t('device.form.section')}
             </p>
             <h2

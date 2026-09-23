@@ -68,8 +68,7 @@ export function AuditPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <p className="text-sm text-cyan-400">{t('audit.section')}</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+        <h1 className="text-3xl font-semibold tracking-tight">
           {t('audit.title')}
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">

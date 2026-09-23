@@ -230,10 +230,7 @@ export function AgentPage() {
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col overflow-hidden">
       <div className="shrink-0 border-b border-zinc-900 pb-4">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
-          {t('agent.section')}
-        </p>
-        <div className="mt-1 flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-100 sm:text-2xl">
             {t('agent.title')}
           </h1>
@@ -383,7 +380,7 @@ export function AgentPage() {
             {suggestionsOpen && !isBusy && hasConversation ? (
               <div className="absolute bottom-[calc(100%+0.75rem)] left-0 right-0 z-20 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur">
                 <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-500">
-                  <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                  <Sparkles className="h-3.5 w-3.5 text-zinc-500" />
                   {t('agent.suggestions')}
                 </div>
                 <div className="grid gap-1 sm:grid-cols-2">
@@ -393,7 +390,7 @@ export function AgentPage() {
                       <button
                         key={key}
                         type="button"
-                        className="rounded-xl px-3 py-2.5 text-left text-sm leading-5 text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+                        className="rounded-xl px-3 py-2.5 text-left text-sm leading-5 text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-100"
                         onClick={() => chooseSuggestion(prompt)}
                       >
                         {prompt}
