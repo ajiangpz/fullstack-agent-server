@@ -11,7 +11,9 @@ import {
   focusTopologyElement,
   renderTopologyGraph,
   resetTopologyLayout,
+  restoreTopologyLayout,
   restoreTopologyView,
+  syncTopologyVisualData,
   type TopologyGraph,
 } from '../graph/g6-adapter';
 import type { TopologyLayoutCapture, TopologyView } from '../types';
@@ -20,6 +22,7 @@ import type { TopologySelection } from '../ui-store';
 export function TopologyCanvas({
   data,
   persistedView,
+  dataKey,
   fitRequest,
   focusRequest,
   captureRequest,
@@ -37,6 +40,7 @@ export function TopologyCanvas({
 }: {
   data: GraphData;
   persistedView: TopologyView | null;
+  dataKey: string;
   fitRequest: number;
   focusRequest: { id: string; token: number } | null;
   captureRequest: number;
@@ -53,6 +57,7 @@ export function TopologyCanvas({
   renderErrorMessage: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const dataRef = useRef(data);
   const graphRef = useRef<TopologyGraph | null>(null);
   const operationRef = useRef<Promise<void>>(Promise.resolve());
   const selectionCallbackRef = useRef(onSelectionChange);
@@ -63,6 +68,7 @@ export function TopologyCanvas({
   selectionCallbackRef.current = onSelectionChange;
   dirtyCallbackRef.current = onLayoutDirty;
   captureCallbackRef.current = onLayoutCapture;
+  dataRef.current = data;
 
   const enqueue = useCallback((operation: (graph: TopologyGraph) => Promise<void>) => {
     operationRef.current = operationRef.current
@@ -90,10 +96,25 @@ export function TopologyCanvas({
   useEffect(() => {
     setRenderError(false);
     enqueue(async (graph) => {
-      await renderTopologyGraph(graph, data);
-      if (persistedView) await restoreTopologyView(graph, persistedView);
+      const previousLayout =
+        graph.getNodeData().length > 0 ? captureTopologyLayout(graph) : null;
+      await renderTopologyGraph(graph, dataRef.current);
+      if (previousLayout) {
+        await restoreTopologyLayout(graph, previousLayout);
+      } else if (persistedView) {
+        await restoreTopologyView(graph, persistedView);
+      }
     });
-  }, [data, enqueue, persistedView]);
+  }, [dataKey, enqueue]);
+
+  useEffect(() => {
+    enqueue((graph) => syncTopologyVisualData(graph, data));
+  }, [data, enqueue]);
+
+  useEffect(() => {
+    if (!persistedView?.viewId) return;
+    enqueue((graph) => restoreTopologyView(graph, persistedView));
+  }, [enqueue, persistedView?.revision]);
 
   useEffect(() => {
     enqueue((graph) =>

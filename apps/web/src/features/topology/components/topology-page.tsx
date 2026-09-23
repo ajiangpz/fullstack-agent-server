@@ -9,10 +9,12 @@ import { useTranslation } from '@/i18n/use-translation';
 import {
   useNetworkSites,
   useSaveTopologyView,
+  useTopologyRealtime,
   useTopologySnapshot,
   useTopologyView,
 } from '../hooks';
 import { toG6GraphData } from '../graph/topology-graph-data';
+import { topologyStructureKey } from '../graph/topology-patch';
 import {
   buildTopologyHierarchy,
   computeTopologyVisibility,
@@ -66,9 +68,14 @@ export function TopologyPage() {
   const viewQuery = useTopologyView(selectedSiteId);
   const saveViewMutation = useSaveTopologyView(selectedSiteId);
   const snapshot = topologyQuery.data;
+  const realtime = useTopologyRealtime(selectedSiteId, snapshot);
   const persistedView = viewQuery.data ?? null;
   const hierarchy = useMemo(() => snapshot ? buildTopologyHierarchy(snapshot) : null, [snapshot]);
   const graphData = useMemo(() => snapshot && hierarchy ? toG6GraphData(snapshot, hierarchy) : { nodes: [], edges: [] }, [hierarchy, snapshot]);
+  const graphDataKey = useMemo(
+    () => (snapshot ? topologyStructureKey(snapshot) : ''),
+    [snapshot],
+  );
   const visibility = useMemo(
     () => snapshot && hierarchy
       ? computeTopologyVisibility(snapshot, hierarchy, {
@@ -96,7 +103,12 @@ export function TopologyPage() {
 
   const onlineCount = snapshot?.nodes.filter((node) => node.status === 'online').length ?? 0;
   const staleLayout = Boolean(
-    snapshot && persistedView?.viewId && persistedView.topologyRevision !== snapshot.revision,
+    snapshot &&
+      persistedView?.viewId &&
+      !sameNodeSet(
+        snapshot.nodes.map((node) => node.id),
+        persistedView.nodes.map((node) => node.nodeId),
+      ),
   );
   const canSaveLayout = Boolean(
     snapshot && !viewQuery.isError && !saveViewMutation.isPending &&
@@ -191,6 +203,7 @@ export function TopologyPage() {
           <Metric label={t('topology.links')} value={snapshot?.edges.length ?? 0} />
         </div>
         {snapshot ? <span className="text-xs text-zinc-600">{t('topology.visible', { count: visibility.visibleNodeIds.size })}</span> : null}
+        <RealtimeStatus status={realtime.status} t={t} />
         <LayoutStatus
           text={layoutStatusText({
             hasView: Boolean(persistedView?.viewId),
@@ -211,7 +224,9 @@ export function TopologyPage() {
           <div className="grid h-full min-h-[440px] place-items-center text-sm text-zinc-500">{topologyQuery.isError ? t('topology.loadError') : t('topology.loading')}</div>
         ) : (
           <TopologyCanvas
+            key={selectedSiteId}
             data={graphData}
+            dataKey={graphDataKey}
             persistedView={persistedView}
             fitRequest={fitRequest}
             focusRequest={focusRequest}
@@ -269,4 +284,19 @@ function layoutStatusText({ hasView, dirty, stale, loading, error, t }: { hasVie
   if (dirty) return t('topology.layout.unsaved');
   if (stale) return t('topology.layout.stale');
   return hasView ? t('topology.layout.saved') : t('topology.layout.notSaved');
+}
+
+function sameNodeSet(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((id) => rightSet.has(id));
+}
+
+function RealtimeStatus({ status, t }: { status: 'connecting' | 'connected' | 'fallback'; t: ReturnType<typeof useTranslation>['t'] }) {
+  const label = status === 'connected'
+    ? t('topology.realtime.connected')
+    : status === 'connecting'
+      ? t('topology.realtime.connecting')
+      : t('topology.realtime.fallback');
+  return <span className={`rounded-full border px-2.5 py-1 text-[11px] ${status === 'connected' ? 'border-emerald-900 bg-emerald-950/50 text-emerald-300' : 'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>{label}</span>;
 }

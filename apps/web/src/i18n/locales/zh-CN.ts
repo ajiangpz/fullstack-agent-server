@@ -98,6 +98,9 @@ export const zhCN = {
   'topology.layout.notSaved': '自动布局尚未保存',
   'topology.layout.loadError': '已保存布局暂不可用',
   'topology.layout.saveError': '无法保存布局。如果其他会话修改过布局，请刷新拓扑后重试。',
+  'topology.realtime.connected': '实时更新已连接',
+  'topology.realtime.connecting': '正在连接实时更新',
+  'topology.realtime.fallback': '实时更新不可用 · 已回退到快照模式',
 
   'nav.agent': 'AI Agent',
   'nav.tasks': '任务',

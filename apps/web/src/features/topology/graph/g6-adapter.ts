@@ -136,6 +136,48 @@ export function captureTopologyLayout(
   };
 }
 
+export async function syncTopologyVisualData(
+  graph: TopologyGraph,
+  data: GraphData,
+) {
+  const existingNodeIds = new Set(
+    graph.getNodeData().map((node) => node.id),
+  );
+  const existingEdgeIds = new Set(
+    graph
+      .getEdgeData()
+      .map((edge) => edge.id)
+      .filter((id): id is string => typeof id === 'string'),
+  );
+
+  const nodes = (data.nodes ?? []).filter((node) =>
+    existingNodeIds.has(node.id),
+  );
+  const edges = (data.edges ?? []).filter(
+    (edge) => edge.id && existingEdgeIds.has(edge.id),
+  );
+
+  if (nodes.length > 0) graph.updateNodeData(nodes);
+  if (edges.length > 0) graph.updateEdgeData(edges);
+  if (nodes.length > 0 || edges.length > 0) await graph.draw();
+}
+
+export async function restoreTopologyLayout(
+  graph: TopologyGraph,
+  layout: TopologyLayoutCapture,
+) {
+  const ids = new Set(graph.getNodeData().map((node) => node.id));
+  const positions: Record<string, [number, number]> = {};
+  for (const node of layout.nodes) {
+    if (ids.has(node.nodeId)) positions[node.nodeId] = [node.x, node.y];
+  }
+  if (Object.keys(positions).length > 0) {
+    await graph.translateElementTo(positions, false);
+  }
+  await graph.zoomTo(layout.viewport.zoom, false);
+  await graph.translateTo([layout.viewport.x, layout.viewport.y], false);
+}
+
 export async function applyTopologyVisibility(
   graph: TopologyGraph,
   visibleNodeIds: Set<string>,

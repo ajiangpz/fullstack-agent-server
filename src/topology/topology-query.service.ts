@@ -3,6 +3,7 @@ import { Prisma } from '../generated/prisma/client';
 import { UserRole } from '../generated/prisma/enums';
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { TopologyRealtimeBus } from './topology-realtime-bus';
 import {
   NetworkSiteSummaryDto,
   TopologyEdgeDto,
@@ -12,7 +13,10 @@ import {
 
 @Injectable()
 export class TopologyQueryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtimeBus: TopologyRealtimeBus,
+  ) {}
 
   async listSites(
     user: AuthenticatedUser,
@@ -35,13 +39,37 @@ export class TopologyQueryService {
     siteId: string,
     user: AuthenticatedUser,
   ): Promise<TopologySnapshotDto> {
-    return this.prisma.$transaction(
+    const site = await this.prisma.networkSite.findFirst({
+      where: {
+        id: siteId,
+        ...this.getSiteOwnershipFilter(user),
+      },
+      select: {
+        id: true,
+        topologyRevision: true,
+      },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Network site ' + siteId + ' not found');
+    }
+
+    const cached = await this.realtimeBus.getSnapshot(siteId);
+    if (cached?.revision === site.topologyRevision) {
+      return cached;
+    }
+
+    return this.buildSiteSnapshot(siteId);
+  }
+
+  async buildSiteSnapshot(
+    siteId: string,
+    cache = true,
+  ): Promise<TopologySnapshotDto> {
+    const snapshot = await this.prisma.$transaction(
       async (tx) => {
-        const site = await tx.networkSite.findFirst({
-          where: {
-            id: siteId,
-            ...this.getSiteOwnershipFilter(user),
-          },
+        const site = await tx.networkSite.findUnique({
+          where: { id: siteId },
           select: {
             id: true,
             name: true,
@@ -101,7 +129,7 @@ export class TopologyQueryService {
         });
 
         return {
-          schemaVersion: 1,
+          schemaVersion: 1 as const,
           site: {
             id: site.id,
             name: site.name,
@@ -116,6 +144,11 @@ export class TopologyQueryService {
         isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
       },
     );
+
+    if (cache) {
+      void this.realtimeBus.cacheSnapshot(snapshot);
+    }
+    return snapshot;
   }
 
   private getSiteOwnershipFilter(

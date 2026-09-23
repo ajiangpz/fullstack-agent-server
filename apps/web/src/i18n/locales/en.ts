@@ -97,6 +97,9 @@ export const en = {
   'topology.layout.notSaved': 'Auto layout is not saved',
   'topology.layout.loadError': 'Saved layout unavailable',
   'topology.layout.saveError': 'Unable to save the layout. Reload the topology if another session changed it.',
+  'topology.realtime.connected': 'Live updates connected',
+  'topology.realtime.connecting': 'Connecting live updates',
+  'topology.realtime.fallback': 'Live updates unavailable · snapshot fallback active',
 
   'nav.agent': 'AI Agent',
   'nav.tasks': 'Tasks',

@@ -100,3 +100,42 @@ export interface TopologyLayoutCapture {
   viewport: TopologyViewport;
   nodes: TopologyViewNodePosition[];
 }
+
+export interface TopologyPatchChanges {
+  nodes: {
+    upsert: TopologyNode[];
+    remove: string[];
+  };
+  edges: {
+    upsert: TopologyEdge[];
+    remove: string[];
+  };
+}
+
+export interface TopologyPatchEvent {
+  schemaVersion: 1;
+  type: 'patch';
+  siteId: string;
+  baseRevision: number;
+  revision: number;
+  changes: TopologyPatchChanges;
+  emittedAt: string;
+}
+
+export interface TopologyResyncEvent {
+  schemaVersion: 1;
+  type: 'resync';
+  siteId: string;
+  revision: number;
+  reason:
+    | 'snapshot-miss'
+    | 'revision-gap'
+    | 'revision-mismatch'
+    | 'concurrent-change';
+  emittedAt: string;
+}
+
+export interface AppliedTopologyPatch {
+  snapshot: TopologySnapshot;
+  structural: boolean;
+}

@@ -15,12 +15,17 @@ export function toG6GraphData(
   };
 }
 
-function toG6Node(node: TopologyNode) {
-  const visual = nodeVisual(node.status);
+export function toG6Node(node: TopologyNode) {
   return {
     id: node.id,
     data: { ...node },
-    style: {
+    style: topologyNodeStyle(node),
+  };
+}
+
+export function topologyNodeStyle(node: TopologyNode) {
+  const visual = nodeVisual(node.status);
+  return {
       size: [156, 56] as [number, number],
       radius: 10,
       fill: visual.fill,
@@ -33,13 +38,11 @@ function toG6Node(node: TopologyNode) {
       labelFontSize: 12,
       labelFontWeight: 600,
       labelPlacement: 'center' as const,
-      cursor: 'pointer' as const,
-    },
+    cursor: 'pointer' as const,
   };
 }
 
 function toG6Edge(edge: TopologyEdge, hierarchy: TopologyHierarchy) {
-  const visual = edgeVisual(edge.status);
   const direction = hierarchy.edgeDirection[edge.id] ?? {
     source: edge.source,
     target: edge.target,
@@ -49,20 +52,25 @@ function toG6Edge(edge: TopologyEdge, hierarchy: TopologyHierarchy) {
     source: direction.source,
     target: direction.target,
     data: { ...edge },
-    style: {
-      stroke: visual.stroke,
-      lineWidth: edgeWidth(edge.speedMbps),
-      lineDash: visual.lineDash,
-      opacity: 0.88,
-      labelText: edge.speedMbps ? formatSpeed(edge.speedMbps) : '',
-      labelFill: '#a1a1aa',
-      labelFontSize: 10,
-      labelBackground: true,
-      labelBackgroundFill: '#18181b',
-      labelBackgroundRadius: 4,
-      labelPadding: [2, 4] as [number, number],
-      cursor: 'pointer' as const,
-    },
+    style: topologyEdgeStyle(edge),
+  };
+}
+
+export function topologyEdgeStyle(edge: TopologyEdge) {
+  const visual = edgeVisual(edge.status);
+  return {
+    stroke: visual.stroke,
+    lineWidth: edgeWidth(edge.speedMbps),
+    lineDash: visual.lineDash,
+    opacity: 0.88,
+    labelText: edge.speedMbps ? formatSpeed(edge.speedMbps) : '',
+    labelFill: '#a1a1aa',
+    labelFontSize: 10,
+    labelBackground: true,
+    labelBackgroundFill: '#18181b',
+    labelBackgroundRadius: 4,
+    labelPadding: [2, 4] as [number, number],
+    cursor: 'pointer' as const,
   };
 }
 

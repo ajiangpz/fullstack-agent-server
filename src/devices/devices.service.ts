@@ -15,6 +15,13 @@ import { QueryDevicesDto } from './dto/query-devices.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DOMAIN_EVENT_NAME, DomainEvent } from '../events/domain-event';
 import { DEFAULT_SITE_NAME } from '../topology/topology.constants';
+import { TopologyRealtimeCoordinator } from '../topology/topology-realtime.coordinator';
+
+interface TopologyRevisionChange {
+  siteId: string;
+  baseRevision: number;
+  revision: number;
+}
 
 export interface PaginatedDevices {
   items: Device[];
@@ -31,6 +38,7 @@ export class DevicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly topologyRealtime: TopologyRealtimeCoordinator,
   ) {}
 
   async findAll(
@@ -117,15 +125,21 @@ export class DevicesService {
     const resolvedSiteId = await this.resolveSiteId(user.id, siteId);
 
     try {
-      const device = await this.prisma.device.create({
-        data: {
-          ...deviceData,
-          ownerId: user.id,
-          siteId: resolvedSiteId,
-        },
+      const result = await this.prisma.$transaction(async (tx) => {
+        const device = await tx.device.create({
+          data: {
+            ...deviceData,
+            ownerId: user.id,
+            siteId: resolvedSiteId,
+          },
+        });
+        const revision = await this.bumpTopologyRevision(tx, resolvedSiteId);
+        return { device, change: this.toRevisionChange(resolvedSiteId, revision) };
       });
-      this.publishDeviceEvent(AuditAction.DEVICE_CREATED, device, user);
-      return device;
+
+      this.publishTopologyChanges([result.change]);
+      this.publishDeviceEvent(AuditAction.DEVICE_CREATED, result.device, user);
+      return result.device;
     } catch (error) {
       this.handleWriteError(error, dto);
     }
@@ -137,21 +151,58 @@ export class DevicesService {
     user: AuthenticatedUser,
   ): Promise<Device> {
     const { siteId, ...deviceData } = dto;
-    const data: Prisma.DeviceUncheckedUpdateInput = { ...deviceData };
-
-    if (siteId !== undefined) {
-      data.siteId = await this.resolveSiteId(user.id, siteId);
-    }
+    const requestedSiteId =
+      siteId !== undefined ? await this.resolveSiteId(user.id, siteId) : undefined;
 
     try {
-      const device = await this.prisma.device.update({
-        where: { id, ...this.getOwnershipFilter(user) },
-        data,
+      const result = await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.device.findFirst({
+          where: { id, ...this.getOwnershipFilter(user) },
+          select: { siteId: true },
+        });
+        if (!existing) {
+          throw new NotFoundException('Device ' + id + ' not found');
+        }
+
+        const targetSiteId = requestedSiteId ?? existing.siteId;
+        if (targetSiteId !== existing.siteId) {
+          const linkCount = await tx.topologyLink.count({
+            where: {
+              OR: [{ aDeviceId: id }, { zDeviceId: id }],
+            },
+          });
+          if (linkCount > 0) {
+            throw new ConflictException(
+              'Disconnect topology links before moving this device to another site',
+            );
+          }
+        }
+
+        const data: Prisma.DeviceUncheckedUpdateInput = { ...deviceData };
+        if (requestedSiteId !== undefined) data.siteId = requestedSiteId;
+
+        const device = await tx.device.update({
+          where: { id, ...this.getOwnershipFilter(user) },
+          data,
+        });
+
+        const changes: TopologyRevisionChange[] = [];
+        const sourceRevision = await this.bumpTopologyRevision(tx, existing.siteId);
+        changes.push(this.toRevisionChange(existing.siteId, sourceRevision));
+
+        if (targetSiteId !== existing.siteId) {
+          const targetRevision = await this.bumpTopologyRevision(tx, targetSiteId);
+          changes.push(this.toRevisionChange(targetSiteId, targetRevision));
+        }
+
+        return { device, changes };
       });
-      this.publishDeviceEvent(AuditAction.DEVICE_UPDATED, device, user, {
+
+      this.publishTopologyChanges(result.changes);
+      this.publishDeviceEvent(AuditAction.DEVICE_UPDATED, result.device, user, {
         changedFields: Object.keys(dto),
       });
-      return device;
+      return result.device;
     } catch (error) {
       this.handleWriteError(error, dto, id);
     }
@@ -159,13 +210,60 @@ export class DevicesService {
 
   async remove(id: number, user: AuthenticatedUser): Promise<Device> {
     try {
-      const device = await this.prisma.device.delete({
-        where: { id, ...this.getOwnershipFilter(user) },
+      const result = await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.device.findFirst({
+          where: { id, ...this.getOwnershipFilter(user) },
+          select: { siteId: true },
+        });
+        if (!existing) {
+          throw new NotFoundException('Device ' + id + ' not found');
+        }
+
+        const device = await tx.device.delete({
+          where: { id, ...this.getOwnershipFilter(user) },
+        });
+        const revision = await this.bumpTopologyRevision(tx, existing.siteId);
+        return { device, change: this.toRevisionChange(existing.siteId, revision) };
       });
-      this.publishDeviceEvent(AuditAction.DEVICE_DELETED, device, user);
-      return device;
+
+      this.publishTopologyChanges([result.change]);
+      this.publishDeviceEvent(AuditAction.DEVICE_DELETED, result.device, user);
+      return result.device;
     } catch (error) {
       this.handleWriteError(error, undefined, id);
+    }
+  }
+
+  private async bumpTopologyRevision(
+    tx: Prisma.TransactionClient,
+    siteId: string,
+  ): Promise<number> {
+    const site = await tx.networkSite.update({
+      where: { id: siteId },
+      data: { topologyRevision: { increment: 1 } },
+      select: { topologyRevision: true },
+    });
+    return site.topologyRevision;
+  }
+
+  private toRevisionChange(
+    siteId: string,
+    revision: number,
+  ): TopologyRevisionChange {
+    return {
+      siteId,
+      baseRevision: revision - 1,
+      revision,
+    };
+  }
+
+  private publishTopologyChanges(changes: TopologyRevisionChange[]): void {
+    for (const change of changes) {
+      void this.topologyRealtime.recordSiteChange(
+        change.siteId,
+        change.baseRevision,
+        change.revision,
+      );
     }
   }
 
