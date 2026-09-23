@@ -166,7 +166,7 @@ describe('DeepSeekProvider', () => {
       choices: [
         {
           message: {
-            content: '{"answer":"device 1","keyPoints":[]}',
+            content: 'device 1',
           },
         },
       ],
@@ -191,7 +191,6 @@ describe('DeepSeekProvider', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         tool_choice: 'auto',
-        response_format: { type: 'json_object' },
         messages: expect.arrayContaining([
           {
             role: 'assistant',
@@ -223,7 +222,7 @@ describe('DeepSeekProvider', () => {
       choices: [
         {
           message: {
-            content: '{"answer":"device 1","keyPoints":[]}',
+            content: 'device 1',
           },
         },
       ],
@@ -233,12 +232,12 @@ describe('DeepSeekProvider', () => {
       'DeepSeek did not return a required tool call',
     );
   });
-  it('streams the final JSON answer without tool definitions', async () => {
+  it('streams only user-visible text without tool definitions', async () => {
     async function* chunks() {
       await Promise.resolve();
       yield {
         model: 'deepseek-flash',
-        choices: [{ delta: { content: '{"answer":"hel' } }],
+        choices: [{ delta: { content: 'hel' } }],
       };
       yield {
         model: 'deepseek-flash',
@@ -246,7 +245,7 @@ describe('DeepSeekProvider', () => {
       };
       yield {
         model: 'deepseek-flash',
-        choices: [{ delta: { content: 'lo","keyPoints":[]}' } }],
+        choices: [{ delta: { content: 'lo' } }],
       };
     }
 
@@ -258,21 +257,52 @@ describe('DeepSeekProvider', () => {
     ).resolves.toEqual({
       type: 'final',
       model: 'deepseek-flash',
-      content: '{"answer":"hello","keyPoints":[]}',
+      content: 'hello',
     });
 
-    expect(deltas).toEqual(['{"answer":"hel', 'lo","keyPoints":[]}']);
+    expect(deltas).toEqual(['hel', 'lo']);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         stream: true,
-        response_format: { type: 'json_object' },
       }),
     );
     expect(create).toHaveBeenCalledWith(
       expect.not.objectContaining({
+        response_format: expect.anything(),
         tools: expect.anything(),
         tool_choice: expect.anything(),
       }),
     );
   });
+
+  it('extracts key points with a separate structured-output call', async () => {
+    create.mockResolvedValue({
+      model: 'deepseek-flash',
+      usage: { prompt_tokens: 8, completion_tokens: 2 },
+      choices: [
+        {
+          message: {
+            content: '{"keyPoints":["device 1"]}',
+          },
+        },
+      ],
+    });
+
+    await expect(provider.generateKeyPoints('device 1')).resolves.toEqual({
+      model: 'deepseek-flash',
+      inputTokens: 8,
+      outputTokens: 2,
+      keyPoints: ['device 1'],
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        response_format: { type: 'json_object' },
+        messages: expect.arrayContaining([
+          { role: 'user', content: 'device 1' },
+        ]),
+      }),
+    );
+  });
+
 });

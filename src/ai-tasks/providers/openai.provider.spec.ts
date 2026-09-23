@@ -58,27 +58,40 @@ describe('OpenAiProvider', () => {
         tools: [expect.objectContaining({ name: 'get_device' })],
       }),
     );
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ text: expect.anything() }),
+    );
   });
 
-  it('returns a final response when no tool call is present', async () => {
+  it('returns user-visible text when no tool call is present', async () => {
     create.mockResolvedValue({
       model: 'test-model',
       output: [],
-      output_text: '{"answer":"device 1","keyPoints":[]}',
+      output_text: 'device 1',
     });
 
     await expect(provider.generateWithTools(request)).resolves.toEqual({
       type: 'final',
       model: 'test-model',
-      content: '{"answer":"device 1","keyPoints":[]}',
+      content: 'device 1',
     });
   });
-  it('adapts the final response to the streaming provider contract', async () => {
-    create.mockResolvedValue({
-      model: 'test-model',
-      output: [],
-      output_text: '{"answer":"device 1","keyPoints":[]}',
-    });
+
+  it('streams only user-visible text deltas', async () => {
+    async function* events() {
+      await Promise.resolve();
+      yield { type: 'response.output_text.delta', delta: 'device ' };
+      yield { type: 'response.output_text.delta', delta: '1' };
+      yield {
+        type: 'response.completed',
+        response: {
+          model: 'test-model',
+          usage: { input_tokens: 12, output_tokens: 4 },
+        },
+      };
+    }
+
+    create.mockResolvedValue(events());
     const deltas: string[] = [];
 
     await expect(
@@ -86,15 +99,45 @@ describe('OpenAiProvider', () => {
     ).resolves.toEqual({
       type: 'final',
       model: 'test-model',
-      content: '{"answer":"device 1","keyPoints":[]}',
+      inputTokens: 12,
+      outputTokens: 4,
+      content: 'device 1',
     });
 
-    expect(deltas).toEqual(['{"answer":"device 1","keyPoints":[]}']);
+    expect(deltas).toEqual(['device ', '1']);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
+        stream: true,
         tools: [],
+      }),
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ text: expect.anything() }),
+    );
+  });
+
+  it('extracts key points with a separate structured-output call', async () => {
+    create.mockResolvedValue({
+      model: 'test-model',
+      usage: { input_tokens: 8, output_tokens: 2 },
+      output_text: '{"keyPoints":["device 1"]}',
+    });
+
+    await expect(provider.generateKeyPoints('device 1')).resolves.toEqual({
+      model: 'test-model',
+      inputTokens: 8,
+      outputTokens: 2,
+      keyPoints: ['device 1'],
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: [{ role: 'user', content: 'device 1' }],
         text: expect.objectContaining({
-          format: expect.objectContaining({ type: 'json_schema' }),
+          format: expect.objectContaining({
+            type: 'json_schema',
+            name: 'ai_task_key_points',
+          }),
         }),
       }),
     );

@@ -23,12 +23,17 @@ interface AiResponseMetadata {
 
 export interface AiFinalResponse extends AiResponseMetadata {
   type: 'final';
+  // Final responses always contain user-visible text, never serialized JSON.
   content: string;
 }
 
 export interface AiToolCallResponse extends AiResponseMetadata {
   type: 'tool_call';
   toolCalls: AiToolCall[];
+}
+
+export interface AiKeyPointsResponse extends AiResponseMetadata {
+  keyPoints: string[];
 }
 
 export type AiResponse = AiFinalResponse | AiToolCallResponse;
@@ -42,8 +47,9 @@ export interface AiProvider {
   generateWithTools(options: AiGenerateWithToolsOptions): Promise<AiResponse>;
   streamFinalAnswer(
     options: AiGenerateWithToolsOptions,
-    onDelta: (delta: string) => void,
+    onTextDelta: (delta: string) => void,
   ): Promise<AiFinalResponse>;
+  generateKeyPoints(answer: string): Promise<AiKeyPointsResponse>;
 }
 
 export class AiProviderError extends Error {

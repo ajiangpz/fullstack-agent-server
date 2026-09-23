@@ -1,7 +1,9 @@
 import OpenAI from 'openai';
+import { parseAiTaskKeyPoints } from '../ai-task-result';
 import type {
   AiFinalResponse,
   AiGenerateWithToolsOptions,
+  AiKeyPointsResponse,
   AiMessage,
   AiProvider,
   AiResponse,
@@ -58,7 +60,7 @@ export class DeepSeekProvider implements AiProvider {
               this.options.instructions,
               requiresToolCall
                 ? 'Call exactly one available tool before answering the user.'
-                : 'Return the final answer as a JSON object with answer and keyPoints fields.',
+                : 'Answer the user directly in Markdown. Do not wrap the answer in JSON.',
             ]
               .filter(Boolean)
               .join('\n'),
@@ -66,9 +68,6 @@ export class DeepSeekProvider implements AiProvider {
           ...messages.map((message) => this.toDeepSeekMessage(message)),
         ],
         max_tokens: this.options.maxOutputTokens,
-        ...(requiresToolCall
-          ? {}
-          : { response_format: { type: 'json_object' as const } }),
         ...(tools.length > 0
           ? {
               tools: tools.map((tool) => ({
@@ -135,7 +134,7 @@ export class DeepSeekProvider implements AiProvider {
 
   async streamFinalAnswer(
     { messages }: AiGenerateWithToolsOptions,
-    onDelta: (delta: string) => void,
+    onTextDelta: (delta: string) => void,
   ): Promise<AiFinalResponse> {
     try {
       const stream = await this.client.chat.completions.create({
@@ -145,7 +144,7 @@ export class DeepSeekProvider implements AiProvider {
             role: 'system',
             content: [
               this.options.instructions,
-              'Return the final answer as a JSON object with answer and keyPoints fields.',
+              'Answer the user directly in Markdown. Do not wrap the answer in JSON.',
             ]
               .filter(Boolean)
               .join('\n'),
@@ -153,7 +152,6 @@ export class DeepSeekProvider implements AiProvider {
           ...messages.map((message) => this.toDeepSeekMessage(message)),
         ],
         max_tokens: this.options.maxOutputTokens,
-        response_format: { type: 'json_object' as const },
         stream: true,
       });
 
@@ -165,18 +163,63 @@ export class DeepSeekProvider implements AiProvider {
         const delta = chunk.choices[0]?.delta?.content;
         if (typeof delta !== 'string' || delta.length === 0) continue;
         content += delta;
-        onDelta(delta);
+        onTextDelta(delta);
       }
 
       if (!content.trim()) {
         throw new AiProviderError('DeepSeek returned an empty response', true);
       }
 
-      return { type: 'final', model, content };
+      return { type: 'final', model, content: content.trim() };
     } catch (error) {
       if (error instanceof AiProviderError) {
         throw error;
       }
+      throw this.normalizeError(error);
+    }
+  }
+
+  async generateKeyPoints(answer: string): Promise<AiKeyPointsResponse> {
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.options.model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Extract concise key points from the supplied final answer. ' +
+              'Do not rewrite the answer. Return a JSON object with only a keyPoints array.',
+          },
+          { role: 'user', content: answer },
+        ],
+        max_tokens: this.options.maxOutputTokens,
+        response_format: { type: 'json_object' as const },
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) {
+        throw new AiProviderError('DeepSeek returned empty key points', false);
+      }
+
+      let keyPoints: string[];
+      try {
+        keyPoints = parseAiTaskKeyPoints(content);
+      } catch (error) {
+        throw new AiProviderError(
+          'DeepSeek returned invalid key points',
+          false,
+          { cause: error },
+        );
+      }
+
+      return {
+        model: response.model,
+        inputTokens: response.usage?.prompt_tokens,
+        outputTokens: response.usage?.completion_tokens,
+        keyPoints,
+      };
+    } catch (error) {
+      if (error instanceof AiProviderError) throw error;
       throw this.normalizeError(error);
     }
   }

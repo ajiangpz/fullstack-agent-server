@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AgentStepType } from '../generated/prisma/enums';
-import { parseAiTaskResult, type AiTaskResult } from './ai-task-result';
+import { validateAiTaskResult, type AiTaskResult } from './ai-task-result';
 import { AiTaskEventBus } from './ai-task-event-bus';
 import { AI_PROVIDER } from './ai-task.constants';
 import { AgentStepService } from './agent-step.service';
@@ -15,7 +15,7 @@ import { LeaseLostError } from './task-lease.service';
 
 @Injectable()
 export class AgentService {
-  // 限制模型与工具的往返次数，避免模型持续请求工具导致任务无法结束。
+  // 限制 Agent 的决策循环次数，避免模型持续请求工具导致任务无法结束。
   private readonly maxSteps = 5;
 
   constructor(
@@ -46,18 +46,27 @@ export class AgentService {
         { messageCount: conversation.length },
       );
       let response: AiResponse;
+      let answerWasStreamed = false;
 
       try {
         if (hasSuccessfulToolResult) {
-          // Provider 流式返回的是 Structured Output 的原始 JSON 片段，
-          // 不能直接把这些协议数据当作用户可见答案发布。
+          let publishChain = Promise.resolve();
           response = await this.aiProvider.streamFinalAnswer(
             {
               messages: conversation,
               tools,
             },
-            () => undefined,
+            (delta) => {
+              if (delta.length === 0) return;
+              answerWasStreamed = true;
+              publishChain = publishChain.then(async () => {
+                await this.events.publish(context.taskId, 'answer.delta', {
+                  delta,
+                });
+              });
+            },
           );
+          await publishChain;
         } else {
           response = await this.aiProvider.generateWithTools({
             messages: conversation,
@@ -81,11 +90,13 @@ export class AgentService {
       }
 
       if (response.type === 'final') {
-        const result = parseAiTaskResult(response.content);
-        // answer.delta 只发布已经解析、验证后的领域答案，避免把 JSON 转义字符泄漏到 UI。
-        await this.events.publish(context.taskId, 'answer.delta', {
-          delta: result.answer,
-        });
+        if (!answerWasStreamed) {
+          await this.events.publish(context.taskId, 'answer.delta', {
+            delta: response.content,
+          });
+        }
+
+        const result = await this.buildFinalResult(response.content, context);
         const finalStep = await this.agentSteps.createRunning(
           context,
           AgentStepType.FINAL_ANSWER,
@@ -178,6 +189,50 @@ export class AgentService {
     }
 
     throw new Error('Agent exceeded maximum steps');
+  }
+
+  private async buildFinalResult(
+    answer: string,
+    context: AgentContext,
+  ): Promise<AiTaskResult> {
+    const metadataStep = await this.agentSteps.createRunning(
+      context,
+      AgentStepType.MODEL_CALL,
+      {
+        purpose: 'KEY_POINTS',
+        answerLength: answer.length,
+      },
+    );
+
+    try {
+      this.assertActive(context);
+      const metadata = await this.aiProvider.generateKeyPoints(answer);
+      this.assertActive(context);
+      await this.agentSteps.completeStep(metadataStep.id, context, {
+        responseType: 'metadata',
+        model: metadata.model,
+        inputTokens: metadata.inputTokens,
+        outputTokens: metadata.outputTokens,
+      });
+
+      return validateAiTaskResult({
+        answer,
+        keyPoints: metadata.keyPoints,
+      });
+    } catch (error) {
+      if (error instanceof LeaseLostError || context.signal.aborted) {
+        throw new LeaseLostError();
+      }
+
+      // Key points are secondary metadata. Preserve the already-generated
+      // user answer even when metadata extraction fails.
+      await this.agentSteps.failStep(
+        metadataStep.id,
+        context,
+        this.errorMessage(error),
+      );
+      return validateAiTaskResult({ answer, keyPoints: [] });
+    }
   }
 
   private toolMessage(

@@ -10,6 +10,7 @@ describe('AgentService', () => {
   const aiProvider: AiProvider = {
     generateWithTools: jest.fn(),
     streamFinalAnswer: jest.fn(),
+    generateKeyPoints: jest.fn(),
   };
   const tool: AgentTool = {
     name: 'get_device',
@@ -45,6 +46,10 @@ describe('AgentService', () => {
     jest.clearAllMocks();
     registry.list.mockReturnValue([tool]);
     registry.get.mockReturnValue(tool);
+    (aiProvider.generateKeyPoints as jest.Mock).mockResolvedValue({
+      model: 'test-model',
+      keyPoints: ['device 1'],
+    });
     service = new AgentService(
       aiProvider,
       registry as unknown as ToolRegistry,
@@ -53,12 +58,13 @@ describe('AgentService', () => {
     );
   });
 
-  it('runs one tool call and then completes the final answer', async () => {
+  it('streams user-visible text and builds structured metadata separately', async () => {
     agentSteps.createRunning
       .mockResolvedValueOnce({ id: 'model-1' })
       .mockResolvedValueOnce({ id: 'tool-call' })
       .mockResolvedValueOnce({ id: 'tool-result' })
       .mockResolvedValueOnce({ id: 'model-2' })
+      .mockResolvedValueOnce({ id: 'metadata' })
       .mockResolvedValueOnce({ id: 'final' });
     (aiProvider.generateWithTools as jest.Mock).mockResolvedValueOnce({
       type: 'tool_call',
@@ -68,14 +74,13 @@ describe('AgentService', () => {
       ],
     });
     (aiProvider.streamFinalAnswer as jest.Mock).mockImplementation(
-      (_options, onDelta: (delta: string) => void) => {
-        onDelta('{"answer":"off');
-        onDelta('line\\n\\nDevice 1","keyPoints":["device 1"]}');
+      (_options, onTextDelta: (delta: string) => void) => {
+        onTextDelta('offline');
+        onTextDelta('\n\nDevice 1');
         return Promise.resolve({
           type: 'final',
           model: 'test-model',
-          content:
-            '{"answer":"offline\\n\\nDevice 1","keyPoints":["device 1"]}',
+          content: 'offline\n\nDevice 1',
         });
       },
     );
@@ -92,23 +97,31 @@ describe('AgentService', () => {
       keyPoints: ['device 1'],
     });
 
-    expect(agentSteps.createRunning).toHaveBeenCalledWith(
-      context,
-      AgentStepType.TOOL_CALL,
-      {
-        toolCallId: 'call-1',
-        name: 'get_device',
-        arguments: { deviceId: 1 },
-      },
-    );
     expect(tool.execute).toHaveBeenCalledWith({ deviceId: 1 }, context);
     expect(aiProvider.generateWithTools).toHaveBeenCalledTimes(1);
     expect(aiProvider.streamFinalAnswer).toHaveBeenCalledTimes(1);
-    expect(events.publish).toHaveBeenCalledTimes(1);
-    expect(events.publish).toHaveBeenCalledWith(
+    expect(aiProvider.generateKeyPoints).toHaveBeenCalledWith(
+      'offline\n\nDevice 1',
+    );
+    expect(events.publish).toHaveBeenNthCalledWith(
+      1,
       'task-1',
       'answer.delta',
-      { delta: 'offline\n\nDevice 1' },
+      { delta: 'offline' },
+    );
+    expect(events.publish).toHaveBeenNthCalledWith(
+      2,
+      'task-1',
+      'answer.delta',
+      { delta: '\n\nDevice 1' },
+    );
+    expect(agentSteps.createRunning).toHaveBeenCalledWith(
+      context,
+      AgentStepType.MODEL_CALL,
+      {
+        purpose: 'KEY_POINTS',
+        answerLength: 17,
+      },
     );
     expect(agentSteps.completeTask).toHaveBeenCalledWith(
       'final',
@@ -117,11 +130,50 @@ describe('AgentService', () => {
     );
   });
 
+  it('keeps the final answer when key-point extraction fails', async () => {
+    agentSteps.createRunning
+      .mockResolvedValueOnce({ id: 'model-1' })
+      .mockResolvedValueOnce({ id: 'metadata' })
+      .mockResolvedValueOnce({ id: 'final' });
+    (aiProvider.generateWithTools as jest.Mock).mockResolvedValueOnce({
+      type: 'final',
+      model: 'test-model',
+      content: 'plain answer',
+    });
+    (aiProvider.generateKeyPoints as jest.Mock).mockRejectedValueOnce(
+      new Error('metadata unavailable'),
+    );
+
+    await expect(
+      service.run([{ role: 'user', content: 'hello' }], context),
+    ).resolves.toEqual({
+      answer: 'plain answer',
+      keyPoints: [],
+    });
+
+    expect(events.publish).toHaveBeenCalledWith(
+      'task-1',
+      'answer.delta',
+      { delta: 'plain answer' },
+    );
+    expect(agentSteps.failStep).toHaveBeenCalledWith(
+      'metadata',
+      context,
+      'metadata unavailable',
+    );
+    expect(agentSteps.completeTask).toHaveBeenCalledWith(
+      'final',
+      context,
+      '{"answer":"plain answer","keyPoints":[]}',
+    );
+  });
+
   it('feeds invalid tool arguments back to the model', async () => {
     agentSteps.createRunning
       .mockResolvedValueOnce({ id: 'model-1' })
       .mockResolvedValueOnce({ id: 'tool-call' })
       .mockResolvedValueOnce({ id: 'model-2' })
+      .mockResolvedValueOnce({ id: 'metadata' })
       .mockResolvedValueOnce({ id: 'final' });
     (aiProvider.generateWithTools as jest.Mock)
       .mockResolvedValueOnce({
@@ -132,7 +184,7 @@ describe('AgentService', () => {
       .mockResolvedValueOnce({
         type: 'final',
         model: 'test-model',
-        content: '{"answer":"need id","keyPoints":[]}',
+        content: 'need id',
       });
     (tool.schema.safeParse as jest.Mock).mockReturnValue({ success: false });
 
@@ -152,5 +204,6 @@ describe('AgentService', () => {
       }),
     );
     expect(aiProvider.streamFinalAnswer).not.toHaveBeenCalled();
+    expect(aiProvider.generateKeyPoints).toHaveBeenCalledWith('need id');
   });
 });

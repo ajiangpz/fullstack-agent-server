@@ -1,8 +1,12 @@
 import OpenAI from 'openai';
-import { AI_TASK_RESULT_JSON_SCHEMA } from '../ai-task-result';
+import {
+  AI_TASK_KEY_POINTS_JSON_SCHEMA,
+  parseAiTaskKeyPoints,
+} from '../ai-task-result';
 import type {
   AiFinalResponse,
   AiGenerateWithToolsOptions,
+  AiKeyPointsResponse,
   AiProvider,
   AiResponse,
 } from './ai-provider';
@@ -44,12 +48,8 @@ export class OpenAiProvider implements AiProvider {
     try {
       const response = await this.client.responses.create({
         model: this.options.model,
-        // 当前请求使用普通消息重放工具结果；tool 角色映射为 API 接受的 user 角色。
-        input: messages.map((message) => ({
-          role: message.role === 'tool' ? ('user' as const) : message.role,
-          content: message.content,
-        })),
-        instructions: this.options.instructions,
+        input: this.toResponseInput(messages),
+        instructions: this.finalAnswerInstructions(),
         max_output_tokens: this.options.maxOutputTokens,
         tools: tools.map((tool) => ({
           type: 'function' as const,
@@ -59,14 +59,6 @@ export class OpenAiProvider implements AiProvider {
           parameters: tool.parameters,
         })),
         tool_choice: 'auto',
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'ai_task_result',
-            strict: true,
-            schema: AI_TASK_RESULT_JSON_SCHEMA,
-          },
-        },
       });
       const metadata = {
         model: response.model,
@@ -82,7 +74,6 @@ export class OpenAiProvider implements AiProvider {
         }));
 
       if (toolCalls.length > 0) {
-        // 只要响应包含函数调用，就交给 Agent 执行，不把伴随文本视为最终答案。
         return { type: 'tool_call', toolCalls, ...metadata };
       }
 
@@ -93,31 +84,117 @@ export class OpenAiProvider implements AiProvider {
 
       return { type: 'final', content, ...metadata };
     } catch (error) {
-      if (error instanceof AiProviderError) {
-        throw error;
-      }
+      if (error instanceof AiProviderError) throw error;
       throw this.normalizeError(error);
     }
   }
 
   async streamFinalAnswer(
-    options: AiGenerateWithToolsOptions,
-    onDelta: (delta: string) => void,
+    { messages }: AiGenerateWithToolsOptions,
+    onTextDelta: (delta: string) => void,
   ): Promise<AiFinalResponse> {
-    const response = await this.generateWithTools({
-      ...options,
-      tools: [],
-    });
+    try {
+      const stream = await this.client.responses.create({
+        model: this.options.model,
+        input: this.toResponseInput(messages),
+        instructions: this.finalAnswerInstructions(),
+        max_output_tokens: this.options.maxOutputTokens,
+        tools: [],
+        stream: true,
+      });
 
-    if (response.type !== 'final') {
-      throw new AiProviderError(
-        'OpenAI returned a tool call for a final-answer request',
-        true,
-      );
+      let content = '';
+      let model = this.options.model;
+      let inputTokens: number | undefined;
+      let outputTokens: number | undefined;
+
+      for await (const event of stream) {
+        if (event.type === 'response.output_text.delta') {
+          if (!event.delta) continue;
+          content += event.delta;
+          onTextDelta(event.delta);
+          continue;
+        }
+
+        if (event.type === 'response.completed') {
+          model = event.response.model;
+          inputTokens = event.response.usage?.input_tokens;
+          outputTokens = event.response.usage?.output_tokens;
+        }
+      }
+
+      const finalContent = content.trim();
+      if (!finalContent) {
+        throw new AiProviderError('OpenAI returned an empty response', true);
+      }
+
+      return {
+        type: 'final',
+        model,
+        inputTokens,
+        outputTokens,
+        content: finalContent,
+      };
+    } catch (error) {
+      if (error instanceof AiProviderError) throw error;
+      throw this.normalizeError(error);
     }
+  }
 
-    onDelta(response.content);
-    return response;
+  async generateKeyPoints(answer: string): Promise<AiKeyPointsResponse> {
+    try {
+      const response = await this.client.responses.create({
+        model: this.options.model,
+        instructions:
+          'Extract concise key points from the supplied final answer. ' +
+          'Do not rewrite the answer. Return only the requested structured data.',
+        input: [{ role: 'user', content: answer }],
+        max_output_tokens: this.options.maxOutputTokens,
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'ai_task_key_points',
+            strict: true,
+            schema: AI_TASK_KEY_POINTS_JSON_SCHEMA,
+          },
+        },
+      });
+
+      let keyPoints: string[];
+      try {
+        keyPoints = parseAiTaskKeyPoints(response.output_text);
+      } catch (error) {
+        throw new AiProviderError('OpenAI returned invalid key points', false, {
+          cause: error,
+        });
+      }
+
+      return {
+        model: response.model,
+        inputTokens: response.usage?.input_tokens,
+        outputTokens: response.usage?.output_tokens,
+        keyPoints,
+      };
+    } catch (error) {
+      if (error instanceof AiProviderError) throw error;
+      throw this.normalizeError(error);
+    }
+  }
+
+  private toResponseInput(messages: AiGenerateWithToolsOptions['messages']) {
+    return messages.map((message) => ({
+      role: message.role === 'tool' ? ('user' as const) : message.role,
+      content: message.content,
+    }));
+  }
+
+  private finalAnswerInstructions(): string {
+    return [
+      this.options.instructions,
+      'When answering the user, return only the user-visible answer in Markdown. Do not wrap the answer in JSON.',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   private parseToolArguments(value: string): unknown {
@@ -127,9 +204,7 @@ export class OpenAiProvider implements AiProvider {
       throw new AiProviderError(
         'OpenAI returned invalid tool arguments',
         true,
-        {
-          cause: error,
-        },
+        { cause: error },
       );
     }
   }

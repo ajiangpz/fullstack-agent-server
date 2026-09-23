@@ -1,6 +1,7 @@
 import type {
   AiFinalResponse,
   AiGenerateWithToolsOptions,
+  AiKeyPointsResponse,
   AiProvider,
   AiResponse,
 } from './ai-provider';
@@ -33,15 +34,13 @@ export class MockAiProvider implements AiProvider {
     return {
       type: 'final',
       model: 'mock',
-      content: JSON.stringify({
-        answer: `当前工具结果：${toolResult.content}`,
-        keyPoints: ['已完成工具调用'],
-      }),
+      content: `当前工具结果：${toolResult.content}`,
     };
   }
+
   async streamFinalAnswer(
     options: AiGenerateWithToolsOptions,
-    onDelta: (delta: string) => void,
+    onTextDelta: (delta: string) => void,
   ): Promise<AiFinalResponse> {
     const response = await this.generateWithTools(options);
     if (response.type !== 'final') {
@@ -50,7 +49,14 @@ export class MockAiProvider implements AiProvider {
       );
     }
 
-    onDelta(response.content);
+    onTextDelta(response.content);
     return response;
+  }
+
+  async generateKeyPoints(): Promise<AiKeyPointsResponse> {
+    return {
+      model: 'mock',
+      keyPoints: ['已完成工具调用'],
+    };
   }
 }
