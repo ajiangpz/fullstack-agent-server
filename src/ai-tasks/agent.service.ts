@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpException, Inject, Injectable } from '@nestjs/common';
 import { AgentStepType } from '../generated/prisma/enums';
 import { parseAiTaskResult, type AiTaskResult } from './ai-task-result';
 import { AiTaskEventBus } from './ai-task-event-bus';
@@ -17,6 +17,7 @@ import { LeaseLostError } from './task-lease.service';
 export class AgentService {
   // 限制模型与工具的往返次数，避免模型持续请求工具导致任务无法结束。
   private readonly maxSteps = 5;
+  private readonly maxToolCallsPerStep = 4;
 
   constructor(
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
@@ -36,8 +37,6 @@ export class AgentService {
       description: tool.description,
       parameters: tool.parameters,
     }));
-    let hasSuccessfulToolResult = false;
-
     for (let index = 0; index < this.maxSteps; index++) {
       this.assertActive(context);
       const modelStep = await this.agentSteps.createRunning(
@@ -48,22 +47,10 @@ export class AgentService {
       let response: AiResponse;
 
       try {
-        if (hasSuccessfulToolResult) {
-          // Provider 流式返回的是 Structured Output 的原始 JSON 片段，
-          // 不能直接把这些协议数据当作用户可见答案发布。
-          response = await this.aiProvider.streamFinalAnswer(
-            {
-              messages: conversation,
-              tools,
-            },
-            () => undefined,
-          );
-        } else {
-          response = await this.aiProvider.generateWithTools({
-            messages: conversation,
-            tools,
-          });
-        }
+        response = await this.aiProvider.generateWithTools({
+          messages: conversation,
+          tools,
+        });
         this.assertActive(context);
         await this.agentSteps.completeStep(modelStep.id, context, {
           responseType: response.type,
@@ -98,83 +85,91 @@ export class AgentService {
         return result;
       }
 
-      const toolCall = response.toolCalls[0];
-      if (!toolCall) {
+      if (response.toolCalls.length === 0) {
         throw new Error('Model returned tool_call without tool');
       }
-      const tool = this.toolRegistry.get(toolCall.name);
-      const toolStep = await this.agentSteps.createRunning(
-        context,
-        AgentStepType.TOOL_CALL,
-        {
-          toolCallId: toolCall.id,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-        },
-      );
-      const parsed = tool.schema.safeParse(toolCall.arguments);
-
-      if (!parsed.success) {
-        // 参数错误属于模型可自行修正的问题，将错误反馈给下一轮而不终止任务。
-        await this.agentSteps.failStep(
-          toolStep.id,
-          context,
-          'Invalid tool arguments',
-        );
-        conversation.push(
-          this.toolMessage(toolCall.id, {
-            success: false,
-            error: 'Invalid tool arguments',
-          }),
-        );
-        continue;
+      if (response.toolCalls.length > this.maxToolCallsPerStep) {
+        throw new Error('Model exceeded tool-call limit for one step');
       }
 
-      let toolResult: unknown;
-      try {
+      // 同一模型响应可能包含多个函数调用。按顺序执行，避免未来加入副作用
+      // Tool 后并行执行造成不可预测的顺序问题。
+      for (const toolCall of response.toolCalls) {
         this.assertActive(context);
-        toolResult = await tool.execute(parsed.data, context);
-        this.assertActive(context);
-        await this.agentSteps.completeStep(toolStep.id, context, {
-          success: true,
+        const tool = this.toolRegistry.get(toolCall.name);
+        const toolStep = await this.agentSteps.createRunning(
+          context,
+          AgentStepType.TOOL_CALL,
+          {
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+          },
+        );
+        const parsed = tool.schema.safeParse(toolCall.arguments);
+
+        conversation.push({
+          role: 'assistant',
+          content: JSON.stringify({
+            toolCallId: toolCall.id,
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+          }),
         });
-      } catch (error) {
-        if (error instanceof LeaseLostError || context.signal.aborted) {
-          throw new LeaseLostError();
-        }
-        await this.agentSteps.failStep(
-          toolStep.id,
-          context,
-          this.errorMessage(error),
-        );
-        // 不把内部异常细节交给模型，避免泄露数据库或服务实现信息。
-        conversation.push(
-          this.toolMessage(toolCall.id, {
-            success: false,
-            error: 'Tool execution failed',
-          }),
-        );
-        continue;
-      }
 
-      const resultStep = await this.agentSteps.createRunning(
-        context,
-        AgentStepType.TOOL_RESULT,
-      );
-      await this.agentSteps.completeStep(resultStep.id, context, {
-        result: toolResult,
-      });
-      // 同时补充工具请求和结果，使下一轮模型拥有完整的调用上下文。
-      conversation.push({
-        role: 'assistant',
-        content: JSON.stringify({
-          toolCallId: toolCall.id,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-        }),
-      });
-      conversation.push(this.toolMessage(toolCall.id, { result: toolResult }));
-      hasSuccessfulToolResult = true;
+        if (!parsed.success) {
+          await this.agentSteps.failStep(
+            toolStep.id,
+            context,
+            'Invalid tool arguments',
+          );
+          conversation.push(
+            this.toolMessage(toolCall.id, {
+              success: false,
+              error: 'Invalid tool arguments',
+            }),
+          );
+          continue;
+        }
+
+        let toolResult: unknown;
+        try {
+          this.assertActive(context);
+          toolResult = await tool.execute(parsed.data, context);
+          this.assertActive(context);
+          await this.agentSteps.completeStep(toolStep.id, context, {
+            success: true,
+          });
+        } catch (error) {
+          if (error instanceof LeaseLostError || context.signal.aborted) {
+            throw new LeaseLostError();
+          }
+          await this.agentSteps.failStep(
+            toolStep.id,
+            context,
+            this.errorMessage(error),
+          );
+          // 不把内部异常细节交给模型，避免泄露数据库或服务实现信息。
+          conversation.push(
+            this.toolMessage(toolCall.id, {
+              success: false,
+              error: this.toolErrorForModel(error),
+            }),
+          );
+          continue;
+        }
+
+        const resultStep = await this.agentSteps.createRunning(
+          context,
+          AgentStepType.TOOL_RESULT,
+        );
+        await this.agentSteps.completeStep(resultStep.id, context, {
+          result: toolResult,
+        });
+        conversation.push(
+          this.toolMessage(toolCall.id, { result: toolResult }),
+        );
+      }
     }
 
     throw new Error('Agent exceeded maximum steps');
@@ -185,6 +180,24 @@ export class AgentService {
     value: Record<string, unknown>,
   ): AiMessage {
     return { role: 'tool', content: JSON.stringify({ toolCallId, ...value }) };
+  }
+
+  private toolErrorForModel(error: unknown): string {
+    if (error instanceof HttpException) {
+      switch (error.getStatus()) {
+        case 400:
+          return 'tool_request_invalid';
+        case 404:
+          return 'resource_not_found_or_inaccessible';
+        case 409:
+          return 'resource_conflict_refresh_required';
+        case 503:
+          return 'tool_dependency_temporarily_unavailable';
+        default:
+          break;
+      }
+    }
+    return 'tool_execution_failed';
   }
 
   private errorMessage(error: unknown): string {

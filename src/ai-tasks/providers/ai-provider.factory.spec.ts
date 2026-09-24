@@ -1,4 +1,7 @@
-import { createAiProvider } from './ai-provider.factory';
+import {
+  buildAgentInstructions,
+  createAiProvider,
+} from './ai-provider.factory';
 import { DeepSeekProvider } from './deepseek.provider';
 import { MockAiProvider } from './mock-ai.provider';
 import { OpenAiProvider } from './openai.provider';
@@ -46,6 +49,14 @@ describe('createAiProvider', () => {
         DEEPSEEK_MODEL: 'deepseek-flash',
       }),
     ).toThrow('DEEPSEEK_API_KEY is required when AI_PROVIDER=deepseek');
+  });
+
+  it('always keeps topology tool-grounding instructions', () => {
+    const instructions = buildAgentInstructions('Custom product guidance.');
+
+    expect(instructions).toContain('use the available tools instead of guessing');
+    expect(instructions).toContain('not an L3 routing-table');
+    expect(instructions).toContain('Custom product guidance.');
   });
 
   it('rejects unsupported providers', () => {

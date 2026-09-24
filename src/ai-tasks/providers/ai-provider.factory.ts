@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_INSTRUCTIONS } from '../ai-task.constants';
 import type { AiProvider } from './ai-provider';
 import { DeepSeekProvider } from './deepseek.provider';
 import { MockAiProvider } from './mock-ai.provider';
@@ -32,7 +33,9 @@ export function createAiProvider(env: Environment = process.env): AiProvider {
           1,
           100_000,
         ),
-        instructions: readOptional(env, 'OPENAI_INSTRUCTIONS'),
+        instructions: buildAgentInstructions(
+          readOptional(env, 'OPENAI_INSTRUCTIONS'),
+        ),
       });
     case 'deepseek':
       return new DeepSeekProvider({
@@ -53,7 +56,9 @@ export function createAiProvider(env: Environment = process.env): AiProvider {
           1,
           393_216,
         ),
-        instructions: readOptional(env, 'DEEPSEEK_INSTRUCTIONS'),
+        instructions: buildAgentInstructions(
+          readOptional(env, 'DEEPSEEK_INSTRUCTIONS'),
+        ),
       });
     default:
       throw new Error(
@@ -105,4 +110,8 @@ function readOptionalInteger(
     throw new Error(`${name} must be an integer between ${min} and ${max}`);
   }
   return value;
+}
+
+export function buildAgentInstructions(custom?: string): string {
+  return [DEFAULT_AGENT_INSTRUCTIONS, custom].filter(Boolean).join('\n');
 }

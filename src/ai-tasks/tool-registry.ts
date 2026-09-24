@@ -3,6 +3,12 @@ import type { AgentTool } from './tools/agent-tool.interface';
 import { GetDeviceTool } from './tools/get-device.tool';
 import { ListDevicesTool } from './tools/list-devices.tool';
 import { SearchDevicesTool } from './tools/search-devices.tool';
+import { ListNetworkSitesTool } from './tools/list-network-sites.tool';
+import { GetTopologyNeighborsTool } from './tools/get-topology-neighbors.tool';
+import { GetTopologyLinkTool } from './tools/get-topology-link.tool';
+import { FindTopologyPathTool } from './tools/find-topology-path.tool';
+import { GetDeviceTopologyMetricsTool } from './tools/get-device-topology-metrics.tool';
+import { GetLinkTopologyMetricsTool } from './tools/get-link-topology-metrics.tool';
 
 @Injectable()
 export class ToolRegistry {
@@ -13,10 +19,22 @@ export class ToolRegistry {
     private readonly getDeviceTool: GetDeviceTool,
     private readonly listDevicesTool: ListDevicesTool,
     private readonly searchDevicesTool: SearchDevicesTool,
+    private readonly listNetworkSitesTool: ListNetworkSitesTool,
+    private readonly getTopologyNeighborsTool: GetTopologyNeighborsTool,
+    private readonly getTopologyLinkTool: GetTopologyLinkTool,
+    private readonly findTopologyPathTool: FindTopologyPathTool,
+    private readonly getDeviceTopologyMetricsTool: GetDeviceTopologyMetricsTool,
+    private readonly getLinkTopologyMetricsTool: GetLinkTopologyMetricsTool,
   ) {
     this.register(getDeviceTool);
     this.register(listDevicesTool);
     this.register(searchDevicesTool);
+    this.register(listNetworkSitesTool);
+    this.register(getTopologyNeighborsTool);
+    this.register(getTopologyLinkTool);
+    this.register(findTopologyPathTool);
+    this.register(getDeviceTopologyMetricsTool);
+    this.register(getLinkTopologyMetricsTool);
   }
 
   private register(tool: AgentTool): void {
