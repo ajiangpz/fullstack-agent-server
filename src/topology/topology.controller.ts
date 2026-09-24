@@ -3,8 +3,10 @@ import {
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +20,8 @@ import {
 import type { AuthenticatedUser } from '../auth/jwt-auth.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../generated/prisma/enums';
 import {
   NetworkSiteSummaryDto,
   TopologySnapshotDto,
@@ -33,6 +37,14 @@ import {
   TopologyDiscoveryRunDto,
 } from './dto/topology-discovery.dto';
 import { TopologyDiscoveryService } from './topology-discovery.service';
+import {
+  DeviceMetricsSeriesDto,
+  IngestTopologyMetricsDto,
+  TopologyLinkMetricsSeriesDto,
+  TopologyMetricsIngestResultDto,
+  TopologyMetricsQueryDto,
+} from './dto/topology-metrics.dto';
+import { TopologyMetricsService } from './topology-metrics.service';
 
 @ApiTags('topology')
 @ApiBearerAuth()
@@ -43,6 +55,7 @@ export class TopologyController {
     private readonly topologyQueryService: TopologyQueryService,
     private readonly topologyViewService: TopologyViewService,
     private readonly topologyDiscoveryService: TopologyDiscoveryService,
+    private readonly topologyMetricsService: TopologyMetricsService,
   ) {}
 
   @ApiOperation({ summary: '获取可访问的网络站点列表' })
@@ -83,6 +96,51 @@ export class TopologyController {
     @Req() request: { user: AuthenticatedUser },
   ): Promise<TopologyViewDto> {
     return this.topologyViewService.saveView(siteId, dto, request.user);
+  }
+
+  @ApiOperation({ summary: '批量写入拓扑设备与链路指标' })
+  @ApiCreatedResponse({ type: TopologyMetricsIngestResultDto })
+  @Roles(UserRole.ADMIN)
+  @Post(':siteId/topology/metrics/samples')
+  ingestTopologyMetrics(
+    @Param('siteId') siteId: string,
+    @Body() dto: IngestTopologyMetricsDto,
+  ): Promise<TopologyMetricsIngestResultDto> {
+    return this.topologyMetricsService.ingest(siteId, dto);
+  }
+
+  @ApiOperation({ summary: '获取设备拓扑时序指标' })
+  @ApiOkResponse({ type: DeviceMetricsSeriesDto })
+  @Get(':siteId/topology/metrics/devices/:deviceId')
+  getDeviceTopologyMetrics(
+    @Param('siteId') siteId: string,
+    @Param('deviceId', ParseIntPipe) deviceId: number,
+    @Query() query: TopologyMetricsQueryDto,
+    @Req() request: { user: AuthenticatedUser },
+  ): Promise<DeviceMetricsSeriesDto> {
+    return this.topologyMetricsService.getDeviceSeries(
+      siteId,
+      deviceId,
+      query,
+      request.user,
+    );
+  }
+
+  @ApiOperation({ summary: '获取链路拓扑时序指标' })
+  @ApiOkResponse({ type: TopologyLinkMetricsSeriesDto })
+  @Get(':siteId/topology/metrics/links/:linkId')
+  getLinkTopologyMetrics(
+    @Param('siteId') siteId: string,
+    @Param('linkId') linkId: string,
+    @Query() query: TopologyMetricsQueryDto,
+    @Req() request: { user: AuthenticatedUser },
+  ): Promise<TopologyLinkMetricsSeriesDto> {
+    return this.topologyMetricsService.getLinkSeries(
+      siteId,
+      linkId,
+      query,
+      request.user,
+    );
   }
 
   @ApiOperation({ summary: '创建拓扑发现任务' })

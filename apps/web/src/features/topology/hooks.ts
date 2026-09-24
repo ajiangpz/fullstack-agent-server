@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
+  getDeviceTopologyMetrics,
+  getLinkTopologyMetrics,
   getTopologySnapshot,
   getTopologyView,
   listNetworkSites,
@@ -10,6 +12,7 @@ import {
 } from './api';
 import type {
   SaveTopologyViewPayload,
+  TopologyMetricsRange,
   TopologySnapshot,
 } from './types';
 import { applyTopologyPatch } from './graph/topology-patch';
@@ -122,4 +125,30 @@ export function useTopologyRealtime(
   }, [queryClient, siteId, status]);
 
   return { status };
+}
+
+export function useDeviceTopologyMetrics(
+  siteId: string,
+  deviceId: number,
+  range: TopologyMetricsRange,
+) {
+  return useQuery({
+    queryKey: ['topology-metrics', siteId, 'device', deviceId, range],
+    queryFn: () => getDeviceTopologyMetrics(siteId, deviceId, range),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useLinkTopologyMetrics(
+  siteId: string,
+  linkId: string,
+  range: TopologyMetricsRange,
+) {
+  return useQuery({
+    queryKey: ['topology-metrics', siteId, 'link', linkId, range],
+    queryFn: () => getLinkTopologyMetrics(siteId, linkId, range),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 }

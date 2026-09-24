@@ -1,7 +1,10 @@
 import { apiRequest } from '@/lib/api-client';
 import type {
+  DeviceMetricsSeries,
   NetworkSiteSummary,
   SaveTopologyViewPayload,
+  TopologyLinkMetricsSeries,
+  TopologyMetricsRange,
   TopologySnapshot,
   TopologyView,
 } from './types';
@@ -32,5 +35,27 @@ export function saveTopologyView(
       method: 'PUT',
       body: JSON.stringify(payload),
     },
+  );
+}
+
+export function getDeviceTopologyMetrics(
+  siteId: string,
+  deviceId: number,
+  range: TopologyMetricsRange,
+) {
+  const params = new URLSearchParams({ range, points: '180' });
+  return apiRequest<DeviceMetricsSeries>(
+    `/sites/${encodeURIComponent(siteId)}/topology/metrics/devices/${deviceId}?${params.toString()}`,
+  );
+}
+
+export function getLinkTopologyMetrics(
+  siteId: string,
+  linkId: string,
+  range: TopologyMetricsRange,
+) {
+  const params = new URLSearchParams({ range, points: '180' });
+  return apiRequest<TopologyLinkMetricsSeries>(
+    `/sites/${encodeURIComponent(siteId)}/topology/metrics/links/${encodeURIComponent(linkId)}?${params.toString()}`,
   );
 }

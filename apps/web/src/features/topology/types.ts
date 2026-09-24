@@ -139,3 +139,39 @@ export interface AppliedTopologyPatch {
   snapshot: TopologySnapshot;
   structural: boolean;
 }
+
+export type TopologyMetricsRange = '1h' | '6h' | '24h' | '7d';
+
+export interface DeviceMetricPoint {
+  sampledAt: string;
+  rxBitsPerSecond: number | null;
+  txBitsPerSecond: number | null;
+  cpuPercent: number | null;
+  memoryPercent: number | null;
+  temperatureCelsius: number | null;
+}
+
+export interface DeviceMetricsSeries {
+  deviceId: number;
+  range: TopologyMetricsRange;
+  from: string;
+  to: string;
+  points: DeviceMetricPoint[];
+}
+
+export interface TopologyLinkMetricPoint {
+  sampledAt: string;
+  aToZBitsPerSecond: number | null;
+  zToABitsPerSecond: number | null;
+  utilizationPercent: number | null;
+  errorRatePercent: number | null;
+  packetLossPercent: number | null;
+}
+
+export interface TopologyLinkMetricsSeries {
+  linkId: string;
+  range: TopologyMetricsRange;
+  from: string;
+  to: string;
+  points: TopologyLinkMetricPoint[];
+}

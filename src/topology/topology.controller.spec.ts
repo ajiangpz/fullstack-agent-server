@@ -5,6 +5,8 @@ import { TopologyController } from './topology.controller';
 import { TopologyQueryService } from './topology-query.service';
 import { TopologyViewService } from './topology-view.service';
 import { TopologyDiscoveryService } from './topology-discovery.service';
+import { TopologyMetricsService } from './topology-metrics.service';
+import { UserRole } from '../generated/prisma/enums';
 
 describe('TopologyController', () => {
   let controller: TopologyController;
@@ -23,6 +25,10 @@ describe('TopologyController', () => {
         },
         {
           provide: TopologyDiscoveryService,
+          useValue: {},
+        },
+        {
+          provide: TopologyMetricsService,
           useValue: {},
         },
       ],
@@ -47,6 +53,8 @@ describe('TopologyController', () => {
     'saveTopologyView',
     'createTopologyDiscovery',
     'getTopologyDiscovery',
+    'getDeviceTopologyMetrics',
+    'getLinkTopologyMetrics',
   ] as const)(
     'allows authenticated users to call %s so ownership is enforced in the service',
     (method) => {
@@ -55,4 +63,13 @@ describe('TopologyController', () => {
       ).toBeUndefined();
     },
   );
+
+  it('restricts metrics ingestion to administrators', () => {
+    expect(
+      Reflect.getMetadata(
+        'roles',
+        TopologyController.prototype.ingestTopologyMetrics,
+      ),
+    ).toEqual([UserRole.ADMIN]);
+  });
 });

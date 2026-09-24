@@ -14,6 +14,7 @@ import { TopologyDiscoveryService } from './topology-discovery.service';
 import { TopologyObservationResolver } from './topology-observation-resolver';
 import { TopologyProcessor } from './topology.processor';
 import { TopologyReconciler } from './topology-reconciler';
+import { TopologyMetricsService } from './topology-metrics.service';
 
 @Module({
   imports: [AuthModule, BullModule.registerQueue({ name: TOPOLOGY_QUEUE })],
@@ -30,12 +31,14 @@ import { TopologyReconciler } from './topology-reconciler';
     TopologyObservationResolver,
     TopologyReconciler,
     TopologyProcessor,
+    TopologyMetricsService,
   ],
   exports: [
     TopologyQueryService,
     TopologyViewService,
     TopologyRealtimeCoordinator,
     TopologyDiscoveryService,
+    TopologyMetricsService,
   ],
 })
 export class TopologyModule {}

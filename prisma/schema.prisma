@@ -82,6 +82,12 @@ enum DiscoveryRunStatus {
   FAILED
 }
 
+enum MetricSource {
+  MANUAL
+  SNMP
+  TELEMETRY
+}
+
 enum UserRole {
   ADMIN
   USER
@@ -261,6 +267,7 @@ model Device {
   ports            DevicePort[]
   topologyLinksAsA TopologyLink[] @relation("TopologyLinkADevice")
   topologyLinksAsZ TopologyLink[] @relation("TopologyLinkZDevice")
+  metricSamples     DeviceMetricSample[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -321,6 +328,7 @@ model TopologyLink {
   lastSeenAt      DateTime           @default(now())
   expiresAt       DateTime?
   metadata        Json?
+  metricSamples   TopologyLinkMetricSample[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
@@ -329,6 +337,42 @@ model TopologyLink {
   @@index([zDeviceId])
   @@index([lastSeenAt])
   @@map("topology_links")
+}
+
+model DeviceMetricSample {
+  id                 BigInt       @id @default(autoincrement())
+  deviceId           Int
+  device             Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  source             MetricSource
+  sampledAt          DateTime
+  rxBitsPerSecond              Float?
+  txBitsPerSecond              Float?
+  cpuPercent         Float?
+  memoryPercent      Float?
+  temperatureCelsius Float?
+  createdAt          DateTime     @default(now())
+
+  @@unique([deviceId, source, sampledAt])
+  @@index([deviceId, sampledAt(sort: Desc)])
+  @@map("device_metric_samples")
+}
+
+model TopologyLinkMetricSample {
+  id                 BigInt       @id @default(autoincrement())
+  linkId             String
+  link               TopologyLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  source             MetricSource
+  sampledAt          DateTime
+  aToZBitsPerSecond            Float?
+  zToABitsPerSecond            Float?
+  utilizationPercent Float?
+  errorRatePercent   Float?
+  packetLossPercent  Float?
+  createdAt          DateTime     @default(now())
+
+  @@unique([linkId, source, sampledAt])
+  @@index([linkId, sampledAt(sort: Desc)])
+  @@map("topology_link_metric_samples")
 }
 
 model DiscoveryRun {

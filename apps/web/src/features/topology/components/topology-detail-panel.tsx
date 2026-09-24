@@ -11,6 +11,10 @@ import {
 } from '../graph/topology-view';
 import type { TopologySnapshot } from '../types';
 import type { TopologySelection } from '../ui-store';
+import {
+  DeviceTopologyMetricsPanel,
+  LinkTopologyMetricsPanel,
+} from './topology-metrics-panel';
 
 export function TopologyDetailPanel({
   snapshot,
@@ -51,6 +55,10 @@ export function TopologyDetailPanel({
             <DetailRow label={t('topology.details.ports')} value={String(node.portCount)} />
             <DetailRow label={t('topology.details.lastSeen')} value={formatDate(node.lastSeenAt, intlLocale, t('topology.details.unknown'))} />
           </div>
+          <DeviceTopologyMetricsPanel
+            siteId={snapshot.site.id}
+            deviceId={node.deviceId}
+          />
           {branchCount > 0 ? (
             <Button variant="secondary" className="w-full justify-between" onClick={() => onToggleCollapsed(node.id, !isCollapsed)}>
               <span className="flex items-center gap-2">
@@ -74,8 +82,12 @@ export function TopologyDetailPanel({
   const direction = hierarchy.edgeDirection[edge.id] ?? { source: edge.source, target: edge.target };
   const source = snapshot.nodes.find((node) => node.id === direction.source);
   const target = snapshot.nodes.find((node) => node.id === direction.target);
-  const sourcePort = direction.source === edge.source ? edge.sourcePort : edge.targetPort;
-  const targetPort = direction.target === edge.target ? edge.targetPort : edge.sourcePort;
+  const metricSource = snapshot.nodes.find((node) => node.id === edge.source);
+  const metricTarget = snapshot.nodes.find((node) => node.id === edge.target);
+  const sourcePort =
+    direction.source === edge.source ? edge.sourcePort : edge.targetPort;
+  const targetPort =
+    direction.target === edge.target ? edge.targetPort : edge.sourcePort;
 
   return (
     <Panel title={t('topology.details.link')} closeLabel={t('common.close')} onClose={onClose}>
@@ -90,6 +102,12 @@ export function TopologyDetailPanel({
         <DetailRow label={t('topology.details.speed')} value={formatTopologySpeed(edge.speedMbps)} />
         <DetailRow label={t('topology.details.confidence')} value={`${Math.round(edge.confidence * 100)}%`} />
         <DetailRow label={t('topology.details.lastSeen')} value={formatDate(edge.lastSeenAt, intlLocale, t('topology.details.unknown'))} />
+        <LinkTopologyMetricsPanel
+          siteId={snapshot.site.id}
+          linkId={edge.linkId}
+          sourceName={metricSource?.name ?? edge.source}
+          targetName={metricTarget?.name ?? edge.target}
+        />
       </div>
     </Panel>
   );
@@ -97,7 +115,7 @@ export function TopologyDetailPanel({
 
 function Panel({ title, closeLabel, onClose, children }: { title: string; closeLabel: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <aside className="absolute inset-y-2 right-2 z-10 w-[min(360px,calc(100%-16px))] overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur">
+    <aside className="absolute inset-y-2 right-2 z-10 w-[min(460px,calc(100%-16px))] overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur">
       <div className="mb-5 flex items-center justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">{title}</p>
         <Button variant="ghost" size="sm" aria-label={closeLabel} onClick={onClose}><X className="h-4 w-4" /></Button>
